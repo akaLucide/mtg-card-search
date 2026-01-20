@@ -35,19 +35,27 @@ const STORES = {
     name: "House of Cards",
     link: document.getElementById("houseOfCardsLink"),
     priceElement: document.getElementById("hocPrice"),
-    buildUrl: (cardSlug, setSlug) =>
-      `https://houseofcards.ca/products/${cardSlug}-${setSlug}`,
-    apiUrl: (cardSlug, setSlug) =>
-      `http://localhost:3000/api/price/hoc/${cardSlug}/${setSlug}`,
+    buildUrl: (cardSlug, setSlug, frameEffect = null) => {
+      const effectPart = frameEffect ? `${frameEffect}-` : "";
+      return `https://houseofcards.ca/products/${cardSlug}-${effectPart}${setSlug}`;
+    },
+    apiUrl: (cardSlug, setSlug, frameEffect = null) => {
+      const effectPart = frameEffect ? `${frameEffect}/` : "";
+      return `http://localhost:3000/api/price/hoc/${cardSlug}/${effectPart}${setSlug}`;
+    },
   },
   "401games": {
     name: "401 Games",
     link: document.getElementById("games401Link"),
     priceElement: document.getElementById("games401Price"),
-    buildUrl: (cardSlug, setCode) =>
-      `https://store.401games.ca/products/${cardSlug}-${setCode}`,
-    apiUrl: (cardSlug, setCode) =>
-      `http://localhost:3000/api/price/401games/${cardSlug}/${setCode}`,
+    buildUrl: (cardSlug, setCode, frameEffect = null) => {
+      const effectPart = frameEffect ? `${frameEffect}-` : "";
+      return `https://store.401games.ca/products/${cardSlug}-${effectPart}${setCode}`;
+    },
+    apiUrl: (cardSlug, setCode, frameEffect = null) => {
+      const effectPart = frameEffect ? `${frameEffect}/` : "";
+      return `http://localhost:3000/api/price/401games/${cardSlug}/${effectPart}${setCode}`;
+    },
   },
 };
 
@@ -195,6 +203,7 @@ searchBtn.addEventListener("click", searchCard);
 function toKebabCase(str) {
   return str
     .toLowerCase()
+    .replace(/'/g, "") // Remove apostrophes first
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
@@ -336,17 +345,21 @@ function setStoreLinks(card) {
   const setCode = card.set;
   const storePrices = {};
 
-  // Detect F2F frame effect variants (extended art, retro border, etc.)
-  let f2fFrameEffect = null;
+  // Detect frame effect variants for F2F and HOC
+  let frameEffect = null;
   if (card.frame_effects && card.frame_effects.length > 0) {
-    const frameEffect = card.frame_effects[0];
-    if (frameEffect === "extendedart") {
-      f2fFrameEffect = "extended-art";
-    } else if (frameEffect === "showcase") {
-      f2fFrameEffect = "showcase";
-    } else if (frameEffect === "borderless") {
-      f2fFrameEffect = "borderless";
+    const effect = card.frame_effects[0];
+    if (effect === "extendedart") {
+      frameEffect = "extended-art";
+    } else if (effect === "showcase") {
+      frameEffect = "showcase";
+    } else if (effect === "borderless") {
+      frameEffect = "borderless";
     }
+  }
+  // Check for borderless via border_color field
+  if (card.border_color === "borderless") {
+    frameEffect = "borderless";
   }
   // Check for retro frame (1997 old-style frame from reprints)
   if (
@@ -354,14 +367,23 @@ function setStoreLinks(card) {
     card.promo_types &&
     card.promo_types.includes("boosterfun")
   ) {
-    f2fFrameEffect = "retro-frame";
+    frameEffect = "retro";
   }
 
   // Build URLs for each store based on their requirements
   const storeParams = {
-    f2f: [cardSlug, collectorNumber, setSlug, f2fFrameEffect],
-    hoc: [cardSlug, setSlug],
-    "401games": [cardSlug, setCode],
+    f2f: [
+      cardSlug,
+      collectorNumber,
+      setSlug,
+      frameEffect === "retro" ? "retro-frame" : frameEffect,
+    ],
+    hoc: [cardSlug, setSlug, frameEffect],
+    "401games": [
+      cardSlug,
+      setCode,
+      frameEffect === "retro" ? "retro-frame" : frameEffect,
+    ],
   };
 
   // Set up each store
@@ -392,10 +414,17 @@ function setStoreLinks(card) {
       collectorNumber,
       setSlug,
       storePrices,
-      f2fFrameEffect,
+      frameEffect === "retro" ? "retro-frame" : frameEffect,
     ),
-    fetchStorePrice("hoc", cardSlug, null, setSlug, storePrices),
-    fetchStorePrice("401games", cardSlug, null, setCode, storePrices),
+    fetchStorePrice("hoc", cardSlug, null, setSlug, storePrices, frameEffect),
+    fetchStorePrice(
+      "401games",
+      cardSlug,
+      null,
+      setCode,
+      storePrices,
+      frameEffect === "retro" ? "retro-frame" : frameEffect,
+    ),
   ]).then(() => {
     sortStoresByPrice(storePrices);
   });
@@ -418,9 +447,9 @@ async function fetchStorePrice(
     if (storeKey === "f2f") {
       url = store.apiUrl(cardSlug, collectorNumber, setSlug, frameEffect);
     } else if (storeKey === "hoc") {
-      url = store.apiUrl(cardSlug, setSlug);
+      url = store.apiUrl(cardSlug, setSlug, frameEffect);
     } else if (storeKey === "401games") {
-      url = store.apiUrl(cardSlug, setSlug); // setSlug is actually setCode here
+      url = store.apiUrl(cardSlug, setSlug, frameEffect); // setSlug is actually setCode here
     }
 
     const response = await fetch(url);

@@ -132,14 +132,14 @@ app.get(
 );
 
 /**
- * House of Cards price scraper
+ * House of Cards price scraper - with frame effect
  */
-app.get("/api/price/hoc/:cardSlug/:setSlug", async (req, res) => {
+app.get("/api/price/hoc/:cardSlug/:frameEffect/:setSlug", async (req, res) => {
   try {
-    const { cardSlug, setSlug } = req.params;
-    const url = `https://houseofcards.ca/products/${cardSlug}-${setSlug}`;
+    const { cardSlug, frameEffect, setSlug } = req.params;
+    const url = `https://houseofcards.ca/products/${cardSlug}-${frameEffect}-${setSlug}`;
 
-    console.log("Fetching HOC:", url);
+    console.log("Fetching HOC (with effect):", url);
 
     const response = await fetchPage(url);
     const $ = cheerio.load(response.data);
@@ -157,6 +157,180 @@ app.get("/api/price/hoc/:cardSlug/:setSlug", async (req, res) => {
       .json({ error: "Failed to fetch price", message: error.message });
   }
 });
+
+/**
+ * House of Cards price scraper - standard (no frame effect)
+ */
+app.get("/api/price/hoc/:cardSlug/:setSlug", async (req, res) => {
+  try {
+    const { cardSlug, setSlug } = req.params;
+    const url = `https://houseofcards.ca/products/${cardSlug}-${setSlug}`;
+
+    console.log("Fetching HOC (standard):", url);
+
+    const response = await fetchPage(url);
+    const $ = cheerio.load(response.data);
+    const price = findPriceInHTML($);
+
+    if (price) {
+      res.json({ price, currency: "CAD", store: "House of Cards", url });
+    } else {
+      res.json({ error: "Price not found", url });
+    }
+  } catch (error) {
+    console.error("HOC Error:", error.message);
+    res
+      .status(500)
+      .json({ error: "Failed to fetch price", message: error.message });
+  }
+});
+
+/**
+ * 401 Games price scraper with frame effect - Searches for Near Mint variant specifically
+ * NOTE: This route MUST come before the standard route to avoid matching issues
+ */
+app.get(
+  "/api/price/401games/:cardSlug/:frameEffect/:setCode",
+  async (req, res) => {
+    try {
+      const { cardSlug, frameEffect, setCode } = req.params;
+      const url = `https://store.401games.ca/products/${cardSlug}-${frameEffect}-${setCode}`;
+
+      console.log("Fetching 401Games (with frame effect):", url);
+
+      const response = await fetchPage(url);
+      const $ = cheerio.load(response.data);
+
+      let price = null;
+
+      console.log("Searching for Near Mint variant in product data...");
+
+      // Search JSON in script tags for variant data
+      const scriptTags = $('script[type="application/json"]').toArray();
+
+      for (const script of scriptTags) {
+        try {
+          const scriptContent = $(script).html();
+          if (scriptContent && scriptContent.includes("variants")) {
+            const jsonData = JSON.parse(scriptContent);
+            const variants = jsonData.variants || jsonData.product?.variants;
+
+            if (variants) {
+              console.log(`Found ${variants.length} variants in JSON`);
+
+              for (const variant of variants) {
+                const variantTitle = (
+                  variant.title ||
+                  variant.option1 ||
+                  variant.name ||
+                  ""
+                ).toLowerCase();
+                console.log(
+                  `  Variant: "${variant.title || variant.option1}" - Price: ${variant.price}`,
+                );
+
+                if (
+                  variantTitle.includes("near mint") ||
+                  variantTitle.includes("nm")
+                ) {
+                  price = parseFloat(variant.price) / 100;
+                  console.log(`✓ Found Near Mint variant price: $${price}`);
+                  break;
+                }
+              }
+
+              if (price) break;
+            }
+          }
+        } catch (e) {
+          // Continue to next script tag
+        }
+      }
+
+      // Try inline script variables if JSON tags didn't work
+      if (!price) {
+        const scriptContents = $("script:not([src])").toArray();
+
+        for (const script of scriptContents) {
+          const content = $(script).html();
+          if (
+            content &&
+            (content.includes("variants") || content.includes("product"))
+          ) {
+            const patterns = [
+              /var\s+product\s*=\s*({[\s\S]*?});/,
+              /window\.__PRODUCT__\s*=\s*({[\s\S]*?});/,
+              /"product"\s*:\s*({[\s\S]*?"variants"[\s\S]*?})/,
+            ];
+
+            for (const pattern of patterns) {
+              const match = content.match(pattern);
+              if (match) {
+                try {
+                  const jsonData = JSON.parse(match[1]);
+                  const variants = jsonData.variants || [];
+
+                  console.log(
+                    `Found ${variants.length} variants in script variable`,
+                  );
+
+                  for (const variant of variants) {
+                    const variantTitle = (
+                      variant.title ||
+                      variant.option1 ||
+                      ""
+                    ).toLowerCase();
+                    console.log(
+                      `  Variant: "${variant.title || variant.option1}" - Price: ${variant.price}`,
+                    );
+
+                    if (
+                      variantTitle.includes("near mint") ||
+                      variantTitle.includes("nm")
+                    ) {
+                      const rawPrice = parseFloat(variant.price);
+                      price = rawPrice > 1000 ? rawPrice / 100 : rawPrice;
+                      console.log(`✓ Found Near Mint variant price: $${price}`);
+                      break;
+                    }
+                  }
+
+                  if (price) break;
+                } catch (e) {
+                  // Continue to next pattern
+                }
+              }
+            }
+
+            if (price) break;
+          }
+        }
+      }
+
+      // Final fallback: meta tag price
+      if (!price) {
+        console.log("No Near Mint specific price found, trying fallback...");
+        const metaPrice = $('meta[property="og:price:amount"]').attr("content");
+        if (metaPrice) {
+          price = parseFloat(metaPrice);
+          console.log(`✓ Found fallback price from meta: $${price}`);
+        }
+      }
+
+      if (price) {
+        res.json({ price, currency: "CAD", store: "401 Games", url });
+      } else {
+        console.log("❌ No price found on page");
+        res.json({ error: "Price not found", url });
+      }
+    } catch (error) {
+      console.error("401Games Error:", error.message);
+      res
+        .status(500)
+        .json({ error: "Failed to fetch price", message: error.message });
+    }
+  },
+);
 
 /**
  * 401 Games price scraper - Searches for Near Mint variant specifically
