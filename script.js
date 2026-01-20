@@ -1,3 +1,7 @@
+// Constants
+const USD_TO_CAD = 1.35;
+
+// DOM Elements
 const cardInput = document.getElementById("cardInput");
 const searchBtn = document.getElementById("searchBtn");
 const cardImage = document.getElementById("cardImage");
@@ -11,9 +15,39 @@ const autocompleteList = document.getElementById("autocomplete-list");
 const printingsSidebar = document.getElementById("printingsSidebar");
 const printingsList = document.getElementById("printingsList");
 const storeLinks = document.getElementById("storeLinks");
-const faceToFaceLink = document.getElementById("faceToFaceLink");
-const houseOfCardsLink = document.getElementById("houseOfCardsLink");
 
+// Store Configuration
+const STORES = {
+  f2f: {
+    name: "Face to Face Games",
+    link: document.getElementById("faceToFaceLink"),
+    priceElement: document.getElementById("f2fPrice"),
+    buildUrl: (cardSlug, collectorNumber, setSlug) =>
+      `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${setSlug}-non-foil`,
+    apiUrl: (cardSlug, collectorNumber, setSlug) =>
+      `http://localhost:3000/api/price/f2f/${cardSlug}/${collectorNumber}/${setSlug}`,
+  },
+  hoc: {
+    name: "House of Cards",
+    link: document.getElementById("houseOfCardsLink"),
+    priceElement: document.getElementById("hocPrice"),
+    buildUrl: (cardSlug, setSlug) =>
+      `https://houseofcards.ca/products/${cardSlug}-${setSlug}`,
+    apiUrl: (cardSlug, setSlug) =>
+      `http://localhost:3000/api/price/hoc/${cardSlug}/${setSlug}`,
+  },
+  "401games": {
+    name: "401 Games",
+    link: document.getElementById("games401Link"),
+    priceElement: document.getElementById("games401Price"),
+    buildUrl: (cardSlug, setCode) =>
+      `https://store.401games.ca/products/${cardSlug}-${setCode}`,
+    apiUrl: (cardSlug, setCode) =>
+      `http://localhost:3000/api/price/401games/${cardSlug}/${setCode}`,
+  },
+};
+
+// State
 let debounceTimer;
 let currentFocus = -1;
 let allPrintings = [];
@@ -139,10 +173,35 @@ function closeAutocomplete() {
   currentFocus = -1;
 }
 
-// Search for card when button is clicked
+// Event Listeners
 searchBtn.addEventListener("click", searchCard);
 
-// Also search when Enter key is pressed (handled in keydown above)
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+/**
+ * Convert string to kebab-case for URLs
+ */
+function toKebabCase(str) {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Format price in CAD
+ */
+function formatPrice(usdPrice) {
+  if (!usdPrice || parseFloat(usdPrice) <= 0) return null;
+  const cadPrice = (parseFloat(usdPrice) * USD_TO_CAD).toFixed(2);
+  return `$${cadPrice} CAD`;
+}
+
+// =============================================================================
+// CARD SEARCH
+// =============================================================================
 
 async function searchCard() {
   const cardNameValue = cardInput.value.trim();
@@ -252,31 +311,122 @@ function displayCard(card) {
   displayPrice(card.prices);
 
   // Set up store links
-  setStoreLinks(card.name, card.set_name, card.collector_number);
+  setStoreLinks(card.name, card.set_name, card.collector_number, card.set);
 
   cardInfo.classList.add("show");
 }
 
-function setStoreLinks(cardName, setName, collectorNumber) {
-  // Convert to kebab-case (lowercase with hyphens)
-  const toKebabCase = (str) => {
-    return str
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  };
+// =============================================================================
+// STORE LINKS AND PRICES
+// =============================================================================
 
+function setStoreLinks(cardName, setName, collectorNumber, setCode) {
   const cardSlug = toKebabCase(cardName);
   const setSlug = toKebabCase(setName);
+  const storePrices = {};
 
-  // Face to Face Games - direct product page
-  faceToFaceLink.href = `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${setSlug}-non-foil`;
+  // Build URLs for each store based on their requirements
+  const storeParams = {
+    f2f: [cardSlug, collectorNumber, setSlug],
+    hoc: [cardSlug, setSlug],
+    "401games": [cardSlug, setCode],
+  };
 
-  // House of Cards - direct product page
-  houseOfCardsLink.href = `https://houseofcards.ca/products/${cardSlug}-${setSlug}`;
+  // Set up each store
+  Object.entries(STORES).forEach(([key, store]) => {
+    // Set store URL using appropriate parameters
+    store.link.href = store.buildUrl(...storeParams[key]);
+
+    // Reset price display
+    store.priceElement.textContent = "Loading...";
+    store.priceElement.className = "store-price loading";
+
+    // Track for sorting
+    storePrices[key] = {
+      price: null,
+      element: store.link,
+      priceElement: store.priceElement,
+    };
+  });
 
   // Show the links section
   storeLinks.classList.add("show");
+
+  // Fetch all prices in parallel
+  Promise.all([
+    fetchStorePrice("f2f", cardSlug, collectorNumber, setSlug, storePrices),
+    fetchStorePrice("hoc", cardSlug, null, setSlug, storePrices),
+    fetchStorePrice("401games", cardSlug, null, setCode, storePrices),
+  ]).then(() => {
+    sortStoresByPrice(storePrices);
+  });
+}
+
+async function fetchStorePrice(
+  storeKey,
+  cardSlug,
+  collectorNumber,
+  setSlug,
+  storePrices,
+) {
+  const store = STORES[storeKey];
+  const priceElement = store.priceElement;
+
+  try {
+    // Build API URL based on store
+    let url;
+    if (storeKey === "f2f") {
+      url = store.apiUrl(cardSlug, collectorNumber, setSlug);
+    } else if (storeKey === "hoc") {
+      url = store.apiUrl(cardSlug, setSlug);
+    } else if (storeKey === "401games") {
+      url = store.apiUrl(cardSlug, setSlug); // setSlug is actually setCode here
+    }
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.price) {
+      priceElement.textContent = `$${data.price.toFixed(2)} CAD`;
+      priceElement.className = "store-price success";
+      storePrices[storeKey].price = data.price;
+    } else {
+      priceElement.textContent = "N/A";
+      priceElement.className = "store-price unavailable";
+      storePrices[storeKey].price = Infinity;
+    }
+  } catch (error) {
+    console.error(`Error fetching ${store.name} price:`, error);
+    priceElement.textContent = "Error";
+    priceElement.className = "store-price error";
+    storePrices[storeKey].price = Infinity;
+  }
+}
+
+function sortStoresByPrice(storePrices) {
+  // Create array of stores with their prices
+  const storesArray = Object.entries(storePrices).map(([key, value]) => ({
+    key,
+    price: value.price,
+    element: value.element,
+    priceElement: value.priceElement,
+  }));
+
+  // Sort by price (lowest to highest)
+  storesArray.sort((a, b) => a.price - b.price);
+
+  // Reorder the DOM elements
+  storesArray.forEach((store, index) => {
+    storeLinks.appendChild(store.element);
+
+    // Remove any existing cheapest class
+    store.element.classList.remove("cheapest-store");
+
+    // Add cheapest class to the first (lowest price) store
+    if (index === 0 && store.price !== Infinity) {
+      store.element.classList.add("cheapest-store");
+    }
+  });
 }
 
 function displayPrice(prices) {
@@ -287,25 +437,21 @@ function displayPrice(prices) {
 
   const priceInfo = [];
 
-  // Convert USD to CAD (approximate rate: 1 USD = 1.35 CAD)
-  const USD_TO_CAD = 1.35;
+  const normalPrice = formatPrice(prices.usd);
+  if (normalPrice) priceInfo.push(normalPrice);
 
-  if (prices.usd) {
-    const cadPrice = (parseFloat(prices.usd) * USD_TO_CAD).toFixed(2);
-    priceInfo.push(`$${cadPrice} CAD`);
-  }
+  const foilPrice = formatPrice(prices.usd_foil);
+  if (foilPrice) priceInfo.push(`${foilPrice} (Foil)`);
 
-  if (prices.usd_foil) {
-    const cadPriceFoil = (parseFloat(prices.usd_foil) * USD_TO_CAD).toFixed(2);
-    priceInfo.push(`$${cadPriceFoil} CAD (Foil)`);
-  }
-
-  if (priceInfo.length > 0) {
-    cardPrice.textContent = `Price: ${priceInfo.join(" | ")}`;
-  } else {
-    cardPrice.textContent = "Price: Not available";
-  }
+  cardPrice.textContent =
+    priceInfo.length > 0
+      ? `Price: ${priceInfo.join(" | ")}`
+      : "Price: Not available";
 }
+
+// =============================================================================
+// PRINTINGS SIDEBAR
+// =============================================================================
 
 function displayPrintings(printings, currentCardId) {
   printingsList.innerHTML = "";
@@ -321,7 +467,6 @@ function displayPrintings(printings, currentCardId) {
     const printingItem = document.createElement("div");
     printingItem.className = "printing-item";
 
-    // Highlight the currently displayed card
     if (card.id === currentCardId) {
       printingItem.classList.add("active");
     }
@@ -335,10 +480,9 @@ function displayPrintings(printings, currentCardId) {
     const priceInfo = document.createElement("div");
     priceInfo.className = "printing-price";
 
-    const USD_TO_CAD = 1.35;
-    if (card.prices?.usd && parseFloat(card.prices.usd) > 0) {
-      const cadPrice = (parseFloat(card.prices.usd) * USD_TO_CAD).toFixed(2);
-      priceInfo.textContent = `$${cadPrice} CAD`;
+    const formattedPrice = formatPrice(card.prices?.usd);
+    if (formattedPrice) {
+      priceInfo.textContent = formattedPrice;
     } else {
       priceInfo.textContent = "N/A";
       priceInfo.classList.add("unavailable");
@@ -347,11 +491,9 @@ function displayPrintings(printings, currentCardId) {
     printingItem.appendChild(setInfo);
     printingItem.appendChild(priceInfo);
 
-    // Add click handler to switch to this printing
+    // Click handler to switch to this printing
     printingItem.addEventListener("click", () => {
       displayCard(card);
-
-      // Update active state
       document.querySelectorAll(".printing-item").forEach((item) => {
         item.classList.remove("active");
       });
@@ -360,8 +502,6 @@ function displayPrintings(printings, currentCardId) {
 
     printingsList.appendChild(printingItem);
   });
-
-  // Show the sidebar
   printingsSidebar.classList.add("show");
 }
 

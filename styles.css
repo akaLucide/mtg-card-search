@@ -234,7 +234,7 @@ h1 {
 .store-link {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 12px 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -256,8 +256,45 @@ h1 {
   transform: translateY(0);
 }
 
+.cheapest-store {
+  background: linear-gradient(135deg, #0d7377 0%, #2a9d5f 100%) !important;
+  box-shadow: 0 4px 12px rgba(42, 157, 95, 0.3);
+}
+
+.cheapest-store:hover {
+  box-shadow: 0 6px 16px rgba(42, 157, 95, 0.5);
+}
+
 .store-icon {
   font-size: 1.2em;
+  margin-right: 8px;
+}
+
+.store-name {
+  flex: 1;
+}
+
+.store-price {
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.95em;
+}
+
+.store-price.loading {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.store-price.success {
+  background: rgba(39, 174, 96, 0.3);
+}
+
+.store-price.unavailable,
+.store-price.error {
+  background: rgba(231, 76, 60, 0.3);
+  font-size: 0.85em;
 }
 
 .printings-sidebar {
