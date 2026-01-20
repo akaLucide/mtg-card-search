@@ -70,7 +70,39 @@ function findPriceInHTML($) {
 // =============================================================================
 
 /**
- * Face to Face Games price scraper
+ * Face to Face Games price scraper - with frame effect
+ */
+app.get(
+  "/api/price/f2f/:cardSlug/:collectorNumber/:frameEffect/:setSlug",
+  async (req, res) => {
+    try {
+      const { cardSlug, collectorNumber, frameEffect, setSlug } = req.params;
+
+      // Build URL with frame effect
+      const url = `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${frameEffect}-${setSlug}-non-foil`;
+
+      console.log("Fetching F2F (with effect):", url);
+
+      const response = await fetchPage(url);
+      const $ = cheerio.load(response.data);
+      const price = findPriceInHTML($);
+
+      if (price) {
+        res.json({ price, currency: "CAD", store: "Face to Face Games", url });
+      } else {
+        res.json({ error: "Price not found", url });
+      }
+    } catch (error) {
+      console.error("F2F Error:", error.message);
+      res
+        .status(500)
+        .json({ error: "Failed to fetch price", message: error.message });
+    }
+  },
+);
+
+/**
+ * Face to Face Games price scraper - standard (no frame effect)
  */
 app.get(
   "/api/price/f2f/:cardSlug/:collectorNumber/:setSlug",
@@ -79,7 +111,7 @@ app.get(
       const { cardSlug, collectorNumber, setSlug } = req.params;
       const url = `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${setSlug}-non-foil`;
 
-      console.log("Fetching F2F:", url);
+      console.log("Fetching F2F (standard):", url);
 
       const response = await fetchPage(url);
       const $ = cheerio.load(response.data);

@@ -22,10 +22,14 @@ const STORES = {
     name: "Face to Face Games",
     link: document.getElementById("faceToFaceLink"),
     priceElement: document.getElementById("f2fPrice"),
-    buildUrl: (cardSlug, collectorNumber, setSlug) =>
-      `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${setSlug}-non-foil`,
-    apiUrl: (cardSlug, collectorNumber, setSlug) =>
-      `http://localhost:3000/api/price/f2f/${cardSlug}/${collectorNumber}/${setSlug}`,
+    buildUrl: (cardSlug, collectorNumber, setSlug, frameEffect = null) => {
+      const effectPart = frameEffect ? `${frameEffect}-` : "";
+      return `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${effectPart}${setSlug}-non-foil`;
+    },
+    apiUrl: (cardSlug, collectorNumber, setSlug, frameEffect = null) => {
+      const effectPart = frameEffect ? `${frameEffect}/` : "";
+      return `http://localhost:3000/api/price/f2f/${cardSlug}/${collectorNumber}/${effectPart}${setSlug}`;
+    },
   },
   hoc: {
     name: "House of Cards",
@@ -51,6 +55,11 @@ const STORES = {
 let debounceTimer;
 let currentFocus = -1;
 let allPrintings = [];
+
+// Set URL hash for card search page
+if (window.location.hash === "" || window.location.hash === "#deck-evaluator") {
+  window.location.hash = "#card-search";
+}
 
 // Autocomplete functionality
 cardInput.addEventListener("input", handleAutocomplete);
@@ -311,7 +320,7 @@ function displayCard(card) {
   displayPrice(card.prices);
 
   // Set up store links
-  setStoreLinks(card.name, card.set_name, card.collector_number, card.set);
+  setStoreLinks(card);
 
   cardInfo.classList.add("show");
 }
@@ -320,14 +329,37 @@ function displayCard(card) {
 // STORE LINKS AND PRICES
 // =============================================================================
 
-function setStoreLinks(cardName, setName, collectorNumber, setCode) {
-  const cardSlug = toKebabCase(cardName);
-  const setSlug = toKebabCase(setName);
+function setStoreLinks(card) {
+  const cardSlug = toKebabCase(card.name);
+  const setSlug = toKebabCase(card.set_name);
+  const collectorNumber = card.collector_number;
+  const setCode = card.set;
   const storePrices = {};
+
+  // Detect F2F frame effect variants (extended art, retro border, etc.)
+  let f2fFrameEffect = null;
+  if (card.frame_effects && card.frame_effects.length > 0) {
+    const frameEffect = card.frame_effects[0];
+    if (frameEffect === "extendedart") {
+      f2fFrameEffect = "extended-art";
+    } else if (frameEffect === "showcase") {
+      f2fFrameEffect = "showcase";
+    } else if (frameEffect === "borderless") {
+      f2fFrameEffect = "borderless";
+    }
+  }
+  // Check for retro frame (1997 old-style frame from reprints)
+  if (
+    card.frame === "1997" &&
+    card.promo_types &&
+    card.promo_types.includes("boosterfun")
+  ) {
+    f2fFrameEffect = "retro-frame";
+  }
 
   // Build URLs for each store based on their requirements
   const storeParams = {
-    f2f: [cardSlug, collectorNumber, setSlug],
+    f2f: [cardSlug, collectorNumber, setSlug, f2fFrameEffect],
     hoc: [cardSlug, setSlug],
     "401games": [cardSlug, setCode],
   };
@@ -354,7 +386,14 @@ function setStoreLinks(cardName, setName, collectorNumber, setCode) {
 
   // Fetch all prices in parallel
   Promise.all([
-    fetchStorePrice("f2f", cardSlug, collectorNumber, setSlug, storePrices),
+    fetchStorePrice(
+      "f2f",
+      cardSlug,
+      collectorNumber,
+      setSlug,
+      storePrices,
+      f2fFrameEffect,
+    ),
     fetchStorePrice("hoc", cardSlug, null, setSlug, storePrices),
     fetchStorePrice("401games", cardSlug, null, setCode, storePrices),
   ]).then(() => {
@@ -368,6 +407,7 @@ async function fetchStorePrice(
   collectorNumber,
   setSlug,
   storePrices,
+  frameEffect = null,
 ) {
   const store = STORES[storeKey];
   const priceElement = store.priceElement;
@@ -376,7 +416,7 @@ async function fetchStorePrice(
     // Build API URL based on store
     let url;
     if (storeKey === "f2f") {
-      url = store.apiUrl(cardSlug, collectorNumber, setSlug);
+      url = store.apiUrl(cardSlug, collectorNumber, setSlug, frameEffect);
     } else if (storeKey === "hoc") {
       url = store.apiUrl(cardSlug, setSlug);
     } else if (storeKey === "401games") {
