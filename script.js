@@ -217,6 +217,48 @@ function formatPrice(usdPrice) {
   return `$${cadPrice} CAD`;
 }
 
+/**
+ * Detect frame effect from card data
+ */
+function detectFrameEffect(card) {
+  // Check frame_effects array
+  if (card.frame_effects && card.frame_effects.length > 0) {
+    const effect = card.frame_effects[0];
+    if (effect === "extendedart") return "extended-art";
+    if (effect === "showcase") return "showcase";
+    if (effect === "borderless") return "borderless";
+  }
+
+  // Check border_color for borderless cards
+  if (card.border_color === "borderless") {
+    return "borderless";
+  }
+
+  // Check for retro frame (1997 old-style frame from reprints)
+  if (
+    card.frame === "1997" &&
+    card.promo_types &&
+    card.promo_types.includes("boosterfun")
+  ) {
+    return "retro";
+  }
+
+  return null;
+}
+
+/**
+ * Normalize frame effect for specific store (retro -> retro-frame for F2F/401)
+ */
+function normalizeFrameEffect(frameEffect, storeKey) {
+  if (
+    frameEffect === "retro" &&
+    (storeKey === "f2f" || storeKey === "401games")
+  ) {
+    return "retro-frame";
+  }
+  return frameEffect;
+}
+
 // =============================================================================
 // CARD SEARCH
 // =============================================================================
@@ -345,30 +387,8 @@ function setStoreLinks(card) {
   const setCode = card.set;
   const storePrices = {};
 
-  // Detect frame effect variants for F2F and HOC
-  let frameEffect = null;
-  if (card.frame_effects && card.frame_effects.length > 0) {
-    const effect = card.frame_effects[0];
-    if (effect === "extendedart") {
-      frameEffect = "extended-art";
-    } else if (effect === "showcase") {
-      frameEffect = "showcase";
-    } else if (effect === "borderless") {
-      frameEffect = "borderless";
-    }
-  }
-  // Check for borderless via border_color field
-  if (card.border_color === "borderless") {
-    frameEffect = "borderless";
-  }
-  // Check for retro frame (1997 old-style frame from reprints)
-  if (
-    card.frame === "1997" &&
-    card.promo_types &&
-    card.promo_types.includes("boosterfun")
-  ) {
-    frameEffect = "retro";
-  }
+  // Detect frame effect variants
+  const frameEffect = detectFrameEffect(card);
 
   // Build URLs for each store based on their requirements
   const storeParams = {
@@ -376,13 +396,13 @@ function setStoreLinks(card) {
       cardSlug,
       collectorNumber,
       setSlug,
-      frameEffect === "retro" ? "retro-frame" : frameEffect,
+      normalizeFrameEffect(frameEffect, "f2f"),
     ],
     hoc: [cardSlug, setSlug, frameEffect],
     "401games": [
       cardSlug,
       setCode,
-      frameEffect === "retro" ? "retro-frame" : frameEffect,
+      normalizeFrameEffect(frameEffect, "401games"),
     ],
   };
 
@@ -392,8 +412,7 @@ function setStoreLinks(card) {
     store.link.href = store.buildUrl(...storeParams[key]);
 
     // Reset price display
-    store.priceElement.textContent = "Loading...";
-    store.priceElement.className = "store-price loading";
+    updatePriceDisplay(store.priceElement, "loading");
 
     // Track for sorting
     storePrices[key] = {
@@ -414,7 +433,7 @@ function setStoreLinks(card) {
       collectorNumber,
       setSlug,
       storePrices,
-      frameEffect === "retro" ? "retro-frame" : frameEffect,
+      normalizeFrameEffect(frameEffect, "f2f"),
     ),
     fetchStorePrice("hoc", cardSlug, null, setSlug, storePrices, frameEffect),
     fetchStorePrice(
@@ -423,11 +442,30 @@ function setStoreLinks(card) {
       null,
       setCode,
       storePrices,
-      frameEffect === "retro" ? "retro-frame" : frameEffect,
+      normalizeFrameEffect(frameEffect, "401games"),
     ),
   ]).then(() => {
     sortStoresByPrice(storePrices);
   });
+}
+
+/**
+ * Update price element display
+ */
+function updatePriceDisplay(priceElement, status, price = null) {
+  if (status === "success" && price) {
+    priceElement.textContent = `$${price.toFixed(2)} CAD`;
+    priceElement.className = "store-price success";
+  } else if (status === "unavailable") {
+    priceElement.textContent = "N/A";
+    priceElement.className = "store-price unavailable";
+  } else if (status === "error") {
+    priceElement.textContent = "Error";
+    priceElement.className = "store-price error";
+  } else {
+    priceElement.textContent = "Loading...";
+    priceElement.className = "store-price loading";
+  }
 }
 
 async function fetchStorePrice(
@@ -456,18 +494,15 @@ async function fetchStorePrice(
     const data = await response.json();
 
     if (data.price) {
-      priceElement.textContent = `$${data.price.toFixed(2)} CAD`;
-      priceElement.className = "store-price success";
+      updatePriceDisplay(priceElement, "success", data.price);
       storePrices[storeKey].price = data.price;
     } else {
-      priceElement.textContent = "N/A";
-      priceElement.className = "store-price unavailable";
+      updatePriceDisplay(priceElement, "unavailable");
       storePrices[storeKey].price = Infinity;
     }
   } catch (error) {
     console.error(`Error fetching ${store.name} price:`, error);
-    priceElement.textContent = "Error";
-    priceElement.className = "store-price error";
+    updatePriceDisplay(priceElement, "error");
     storePrices[storeKey].price = Infinity;
   }
 }

@@ -227,6 +227,23 @@ async function scrape401GamesPrice(url) {
   }
 }
 
+/**
+ * Wrapper for route handlers with consistent error handling
+ */
+function asyncRouteHandler(storeName, handler) {
+  return async (req, res) => {
+    try {
+      const result = await handler(req);
+      res.json(result);
+    } catch (error) {
+      console.error(`${storeName} Error:`, error.message);
+      res
+        .status(500)
+        .json({ error: "Failed to fetch price", message: error.message });
+    }
+  };
+}
+
 // =============================================================================
 // STORE SCRAPERS
 // =============================================================================
@@ -236,21 +253,12 @@ async function scrape401GamesPrice(url) {
  */
 app.get(
   "/api/price/f2f/:cardSlug/:collectorNumber/:frameEffect/:setSlug",
-  async (req, res) => {
-    try {
-      const { cardSlug, collectorNumber, frameEffect, setSlug } = req.params;
-      const url = `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${frameEffect}-${setSlug}-non-foil`;
-      console.log("Fetching F2F (with effect):", url);
-
-      const result = await scrapeStorePrice("Face to Face Games", url);
-      res.json(result);
-    } catch (error) {
-      console.error("F2F Error:", error.message);
-      res
-        .status(500)
-        .json({ error: "Failed to fetch price", message: error.message });
-    }
-  },
+  asyncRouteHandler("F2F", async (req) => {
+    const { cardSlug, collectorNumber, frameEffect, setSlug } = req.params;
+    const url = `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${frameEffect}-${setSlug}-non-foil`;
+    console.log("Fetching F2F (with effect):", url);
+    return await scrapeStorePrice("Face to Face Games", url);
+  }),
 );
 
 /**
@@ -258,60 +266,39 @@ app.get(
  */
 app.get(
   "/api/price/f2f/:cardSlug/:collectorNumber/:setSlug",
-  async (req, res) => {
-    try {
-      const { cardSlug, collectorNumber, setSlug } = req.params;
-      const url = `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${setSlug}-non-foil`;
-      console.log("Fetching F2F (standard):", url);
-
-      const result = await scrapeStorePrice("Face to Face Games", url);
-      res.json(result);
-    } catch (error) {
-      console.error("F2F Error:", error.message);
-      res
-        .status(500)
-        .json({ error: "Failed to fetch price", message: error.message });
-    }
-  },
+  asyncRouteHandler("F2F", async (req) => {
+    const { cardSlug, collectorNumber, setSlug } = req.params;
+    const url = `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${setSlug}-non-foil`;
+    console.log("Fetching F2F (standard):", url);
+    return await scrapeStorePrice("Face to Face Games", url);
+  }),
 );
 
 /**
  * House of Cards price scraper - with frame effect
  */
-app.get("/api/price/hoc/:cardSlug/:frameEffect/:setSlug", async (req, res) => {
-  try {
+app.get(
+  "/api/price/hoc/:cardSlug/:frameEffect/:setSlug",
+  asyncRouteHandler("HOC", async (req) => {
     const { cardSlug, frameEffect, setSlug } = req.params;
     const url = `https://houseofcards.ca/products/${cardSlug}-${frameEffect}-${setSlug}`;
     console.log("Fetching HOC (with effect):", url);
-
-    const result = await scrapeStorePrice("House of Cards", url);
-    res.json(result);
-  } catch (error) {
-    console.error("HOC Error:", error.message);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch price", message: error.message });
-  }
-});
+    return await scrapeStorePrice("House of Cards", url);
+  }),
+);
 
 /**
  * House of Cards price scraper - standard (no frame effect)
  */
-app.get("/api/price/hoc/:cardSlug/:setSlug", async (req, res) => {
-  try {
+app.get(
+  "/api/price/hoc/:cardSlug/:setSlug",
+  asyncRouteHandler("HOC", async (req) => {
     const { cardSlug, setSlug } = req.params;
     const url = `https://houseofcards.ca/products/${cardSlug}-${setSlug}`;
     console.log("Fetching HOC (standard):", url);
-
-    const result = await scrapeStorePrice("House of Cards", url);
-    res.json(result);
-  } catch (error) {
-    console.error("HOC Error:", error.message);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch price", message: error.message });
-  }
-});
+    return await scrapeStorePrice("House of Cards", url);
+  }),
+);
 
 /**
  * 401 Games price scraper with frame effect - Searches for Near Mint variant specifically
@@ -319,41 +306,26 @@ app.get("/api/price/hoc/:cardSlug/:setSlug", async (req, res) => {
  */
 app.get(
   "/api/price/401games/:cardSlug/:frameEffect/:setCode",
-  async (req, res) => {
-    try {
-      const { cardSlug, frameEffect, setCode } = req.params;
-      const url = `https://store.401games.ca/products/${cardSlug}-${frameEffect}-${setCode}`;
-      console.log("Fetching 401Games (with frame effect):", url);
-
-      const result = await scrape401GamesPrice(url);
-      res.json(result);
-    } catch (error) {
-      console.error("401Games Error:", error.message);
-      res
-        .status(500)
-        .json({ error: "Failed to fetch price", message: error.message });
-    }
-  },
+  asyncRouteHandler("401Games", async (req) => {
+    const { cardSlug, frameEffect, setCode } = req.params;
+    const url = `https://store.401games.ca/products/${cardSlug}-${frameEffect}-${setCode}`;
+    console.log("Fetching 401Games (with frame effect):", url);
+    return await scrape401GamesPrice(url);
+  }),
 );
 
 /**
  * 401 Games price scraper - Searches for Near Mint variant specifically
  */
-app.get("/api/price/401games/:cardSlug/:setCode", async (req, res) => {
-  try {
+app.get(
+  "/api/price/401games/:cardSlug/:setCode",
+  asyncRouteHandler("401Games", async (req) => {
     const { cardSlug, setCode } = req.params;
     const url = `https://store.401games.ca/products/${cardSlug}-${setCode}`;
     console.log("Fetching 401Games:", url);
-
-    const result = await scrape401GamesPrice(url);
-    res.json(result);
-  } catch (error) {
-    console.error("401Games Error:", error.message);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch price", message: error.message });
-  }
-});
+    return await scrape401GamesPrice(url);
+  }),
+);
 
 // =============================================================================
 // TEST & SERVER START
