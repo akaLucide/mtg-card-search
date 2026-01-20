@@ -128,7 +128,7 @@ async function handleAutocomplete() {
     } catch (error) {
       console.error("Autocomplete error:", error);
     }
-  }, 300);
+  }, 25);
 }
 
 function displayAutocomplete(suggestions) {
