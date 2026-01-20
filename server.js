@@ -49,7 +49,7 @@ async function fetchPage(url) {
       "Accept-Language": "en-US,en;q=0.5",
       Connection: "keep-alive",
     },
-    timeout: 15000,
+    timeout: 8000, // Reduced from 15s to 8s to fail faster on rate limits
   });
 }
 
@@ -236,10 +236,29 @@ function asyncRouteHandler(storeName, handler) {
       const result = await handler(req);
       res.json(result);
     } catch (error) {
-      console.error(`${storeName} Error:`, error.message);
-      res
-        .status(500)
-        .json({ error: "Failed to fetch price", message: error.message });
+      // Provide more specific error messages
+      if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") {
+        console.error(`${storeName} Timeout:`, req.url);
+        res
+          .status(504)
+          .json({
+            error: "Request timeout",
+            message: "Store took too long to respond",
+          });
+      } else if (error.response && error.response.status === 404) {
+        console.error(`${storeName} Not Found:`, req.url);
+        res
+          .status(404)
+          .json({
+            error: "Card not found",
+            message: "Card not available at this store",
+          });
+      } else {
+        console.error(`${storeName} Error:`, error.message);
+        res
+          .status(500)
+          .json({ error: "Failed to fetch price", message: error.message });
+      }
     }
   };
 }

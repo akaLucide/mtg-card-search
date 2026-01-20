@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MTG Deck Evaluator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>MTG Deck Evaluator</h1>
+
+      <div class="back-link">
+        <a href="index.html">← Back to Card Search</a>
+      </div>
+
+      <div class="deck-input-section">
+        <label for="deckList"
+          >Paste your deck list (format: 1x Card Name):</label
+        >
+        <textarea
+          id="deckList"
+          placeholder="4x Lightning Bolt&#10;1x Underground Sea&#10;2x Cabal Ritual&#10;1x Deflecting Swat&#10;1x Jeska's Will"
+          rows="15"
+        ></textarea>
+        <button id="evaluateBtn" type="button">Evaluate Deck</button>
+      </div>
+
+      <div id="loadingDeck" class="loading">
+        Evaluating deck... This may take a while.
+      </div>
+      <div id="errorDeck" class="error-message"></div>
+
+      <div id="resultsSection" class="results-section">
+        <h2>Evaluation Results</h2>
+        <div id="cardResults" class="card-results"></div>
+
+        <div id="totalsSection" class="totals-section">
+          <h3>Store Totals</h3>
+          <div id="storeTotals" class="store-totals"></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="utils.js"></script>
+    <script src="deck-evaluator.js"></script>
+  </body>
+</html>

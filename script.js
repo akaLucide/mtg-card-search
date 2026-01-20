@@ -47,7 +47,7 @@ const STORES = {
     },
     apiUrl: (cardSlug, collectorNumber, setSlug, frameEffect = null) => {
       const effectPart = frameEffect ? `${frameEffect}/` : "";
-      return `http://localhost:3000/api/price/f2f/${cardSlug}/${collectorNumber}/${effectPart}${setSlug}`;
+      return `${API_BASE}/price/f2f/${cardSlug}/${collectorNumber}/${effectPart}${setSlug}`;
     },
   },
   hoc: {
@@ -60,7 +60,7 @@ const STORES = {
     },
     apiUrl: (cardSlug, setSlug, frameEffect = null) => {
       const effectPart = frameEffect ? `${frameEffect}/` : "";
-      return `http://localhost:3000/api/price/hoc/${cardSlug}/${effectPart}${setSlug}`;
+      return `${API_BASE}/price/hoc/${cardSlug}/${effectPart}${setSlug}`;
     },
   },
   "401games": {
@@ -73,7 +73,7 @@ const STORES = {
     },
     apiUrl: (cardSlug, setCode, frameEffect = null) => {
       const effectPart = frameEffect ? `${frameEffect}/` : "";
-      return `http://localhost:3000/api/price/401games/${cardSlug}/${effectPart}${setCode}`;
+      return `${API_BASE}/price/401games/${cardSlug}/${effectPart}${setCode}`;
     },
   },
 };
@@ -82,11 +82,6 @@ const STORES = {
 let debounceTimer;
 let currentFocus = -1;
 let allPrintings = [];
-
-// Set URL hash for card search page
-if (window.location.hash === "" || window.location.hash === "#deck-evaluator") {
-  window.location.hash = "#card-search";
-}
 
 // Autocomplete functionality
 cardInput.addEventListener("input", handleAutocomplete);
@@ -217,65 +212,12 @@ searchBtn.addEventListener("click", searchCard);
 // =============================================================================
 
 /**
- * Convert string to kebab-case for URLs
- */
-function toKebabCase(str) {
-  return str
-    .toLowerCase()
-    .replace(/'/g, "") // Remove apostrophes first
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-/**
  * Format price in CAD
  */
 function formatPrice(usdPrice) {
   if (!usdPrice || parseFloat(usdPrice) <= 0) return null;
   const cadPrice = (parseFloat(usdPrice) * USD_TO_CAD).toFixed(2);
   return `$${cadPrice} CAD`;
-}
-
-/**
- * Detect frame effect from card data
- */
-function detectFrameEffect(card) {
-  // Check frame_effects array
-  if (card.frame_effects && card.frame_effects.length > 0) {
-    const effect = card.frame_effects[0];
-    if (effect === "extendedart") return "extended-art";
-    if (effect === "showcase") return "showcase";
-    if (effect === "borderless") return "borderless";
-  }
-
-  // Check border_color for borderless cards
-  if (card.border_color === "borderless") {
-    return "borderless";
-  }
-
-  // Check for retro frame (1997 old-style frame from reprints)
-  if (
-    card.frame === "1997" &&
-    card.promo_types &&
-    card.promo_types.includes("boosterfun")
-  ) {
-    return "retro";
-  }
-
-  return null;
-}
-
-/**
- * Normalize frame effect for specific store (retro -> retro-frame for F2F/401)
- */
-function normalizeFrameEffect(frameEffect, storeKey) {
-  if (
-    frameEffect === "retro" &&
-    (storeKey === "f2f" || storeKey === "401games")
-  ) {
-    return "retro-frame";
-  }
-  return frameEffect;
 }
 
 // =============================================================================
