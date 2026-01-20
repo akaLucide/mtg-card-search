@@ -1,5 +1,24 @@
 // Constants
-const USD_TO_CAD = 1.35;
+let USD_TO_CAD = 1.35; // Default fallback value
+
+// Fetch live exchange rate
+async function fetchExchangeRate() {
+  try {
+    const response = await fetch(
+      "https://api.exchangerate-api.com/v4/latest/USD",
+    );
+    const data = await response.json();
+    if (data.rates && data.rates.CAD) {
+      USD_TO_CAD = data.rates.CAD;
+      console.log(`Updated USD to CAD rate: ${USD_TO_CAD}`);
+    }
+  } catch (error) {
+    console.warn("Failed to fetch exchange rate, using default 1.35:", error);
+  }
+}
+
+// Fetch exchange rate on page load
+fetchExchangeRate();
 
 // DOM Elements
 const cardInput = document.getElementById("cardInput");
