@@ -4,7 +4,19 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 
 const app = express();
-const PORT = 3000;
+
+// =============================================================================
+// CONFIGURATION
+// =============================================================================
+
+const CONFIG = {
+  PORT: 3000,
+  REQUEST_TIMEOUT_MS: 8000, // Reduced to fail faster on rate limits
+  USER_AGENT:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+};
+
+const PORT = CONFIG.PORT;
 
 // Middleware
 app.use(cors());
@@ -28,7 +40,9 @@ const COMMON_PRICE_SELECTORS = [
 ];
 
 /**
- * Extract price from text using regex
+ * Extract numeric price from text using regex
+ * @param {string} text - Text containing price
+ * @returns {number|null} - Extracted price or null
  */
 function extractPrice(text) {
   if (!text) return null;
@@ -38,23 +52,26 @@ function extractPrice(text) {
 
 /**
  * Fetch HTML page with standard headers
+ * @param {string} url - URL to fetch
+ * @returns {Promise<Object>} - Axios response object
  */
 async function fetchPage(url) {
   return await axios.get(url, {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "User-Agent": CONFIG.USER_AGENT,
       Accept:
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.5",
       Connection: "keep-alive",
     },
-    timeout: 8000, // Reduced from 15s to 8s to fail faster on rate limits
+    timeout: CONFIG.REQUEST_TIMEOUT_MS,
   });
 }
 
 /**
- * Try to find price using common selectors
+ * Try to find price using common CSS selectors
+ * @param {Object} $ - Cheerio instance
+ * @returns {number|null} - Extracted price or null
  */
 function findPriceInHTML($) {
   for (const selector of COMMON_PRICE_SELECTORS) {
@@ -239,25 +256,30 @@ function asyncRouteHandler(storeName, handler) {
       // Provide more specific error messages
       if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") {
         console.error(`${storeName} Timeout:`, req.url);
-        res
-          .status(504)
-          .json({
-            error: "Request timeout",
-            message: "Store took too long to respond",
-          });
+        res.status(504).json({
+          error: "Request timeout",
+          message: "Store took too long to respond",
+        });
       } else if (error.response && error.response.status === 404) {
-        console.error(`${storeName} Not Found:`, req.url);
-        res
-          .status(404)
-          .json({
-            error: "Card not found",
-            message: "Card not available at this store",
-          });
+        console.error(`${storeName} Not Found: ${req.url}`);
+        res.status(404).json({
+          error: "Card not found",
+          message: "Card not available at this store",
+          url: req.url,
+        });
+      } else if (error.response && error.response.status === 429) {
+        console.error(`${storeName} Rate Limited: ${req.url}`);
+        res.status(429).json({
+          error: "Rate limited",
+          message: "Too many requests to store",
+        });
       } else {
         console.error(`${storeName} Error:`, error.message);
-        res
-          .status(500)
-          .json({ error: "Failed to fetch price", message: error.message });
+        res.status(500).json({
+          error: "Failed to fetch price",
+          message: error.message,
+          url: req.url,
+        });
       }
     }
   };

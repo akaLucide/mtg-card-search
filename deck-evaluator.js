@@ -1,6 +1,22 @@
-// Deck Evaluator JavaScript
+// =============================================================================
+// DECK EVALUATOR
+// Evaluates entire deck lists by finding cheapest printing for each card
+// =============================================================================
 
-// Parse deck list from textarea
+/**
+ * Configuration constants
+ */
+const DECK_EVAL_CONFIG = {
+  DELAY_BETWEEN_CARDS_MS: 300, // Delay to prevent rate limiting
+  DEFAULT_QUANTITY: 1,
+};
+
+/**
+ * Parse deck list from textarea
+ * Supports formats: "4x Lightning Bolt", "4 Lightning Bolt", "Lightning Bolt"
+ * @param {string} deckText - Raw deck list text
+ * @returns {Array<{quantity: number, name: string}>} - Parsed cards with quantities
+ */
 function parseDeckList(deckText) {
   const lines = deckText.trim().split("\n");
   const cards = [];
@@ -16,15 +32,22 @@ function parseDeckList(deckText) {
       const cardName = match[2].trim();
       cards.push({ quantity, name: cardName });
     } else {
-      // If no quantity prefix, default to 1
-      cards.push({ quantity: 1, name: trimmed });
+      // If no quantity prefix, use default
+      cards.push({
+        quantity: DECK_EVAL_CONFIG.DEFAULT_QUANTITY,
+        name: trimmed,
+      });
     }
   }
 
   return cards;
 }
 
-// Get all printings for a card
+/**
+ * Fetch all printings of a card from Scryfall API
+ * @param {string} cardName - The card name to search for
+ * @returns {Promise<Array>} - Array of card objects from Scryfall
+ */
 async function getCardPrintings(cardName) {
   try {
     const response = await fetch(
@@ -39,7 +62,11 @@ async function getCardPrintings(cardName) {
   }
 }
 
-// Get prices from all stores for a specific printing
+/**
+ * Fetch prices from all three stores for a specific card printing
+ * @param {Object} printing - Scryfall card object
+ * @returns {Promise<Object>} - Object with store keys and price data
+ */
 async function getPricesForPrinting(printing) {
   const prices = {};
 
@@ -57,7 +84,12 @@ async function getPricesForPrinting(printing) {
   return prices;
 }
 
-// Find cheapest printing across all stores
+/**
+ * Find the cheapest printing of a card across all stores
+ * Prioritizes cards with USD prices, falls back to first printing
+ * @param {string} cardName - The card name to search for
+ * @returns {Promise<Object>} - Result object with price, store, URL, and printing info
+ */
 async function findCheapestPrinting(cardName) {
   const printings = await getCardPrintings(cardName);
   if (printings.length === 0) {
@@ -146,10 +178,11 @@ async function evaluateDeck() {
     // Update progress
     updateProgress(results.length, cards.length);
 
-    // Add delay between cards to avoid overwhelming the server
-    // This prevents rate limiting from stores (500ms delay)
+    // Add delay between cards to prevent rate limiting
     if (results.length < cards.length) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) =>
+        setTimeout(resolve, DECK_EVAL_CONFIG.DELAY_BETWEEN_CARDS_MS),
+      );
     }
   }
 

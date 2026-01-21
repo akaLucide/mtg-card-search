@@ -1,5 +1,5 @@
 // =============================================================================
-// SHARED UTILITY FUNCTIONS
+// SHARED UTILITY FUNCTIONS & STORE CONFIGURATION
 // Used by both script.js (main search) and deck-evaluator.js (deck evaluator)
 // =============================================================================
 
@@ -7,6 +7,37 @@
  * API Base URL
  */
 const API_BASE = "http://localhost:3000/api";
+
+/**
+ * Store Configuration
+ * Centralized configuration for all three Canadian MTG stores
+ */
+const STORE_CONFIG = {
+  f2f: {
+    name: "Face to Face Games",
+    key: "f2f",
+    buildStoreUrl: (cardSlug, collectorNumber, setSlug, frameEffect = null) => {
+      const effectPart = frameEffect ? `${frameEffect}-` : "";
+      return `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${effectPart}${setSlug}-non-foil`;
+    },
+  },
+  hoc: {
+    name: "House of Cards",
+    key: "hoc",
+    buildStoreUrl: (cardSlug, setSlug, frameEffect = null) => {
+      const effectPart = frameEffect ? `${frameEffect}-` : "";
+      return `https://houseofcards.ca/products/${cardSlug}-${effectPart}${setSlug}`;
+    },
+  },
+  "401games": {
+    name: "401 Games",
+    key: "401games",
+    buildStoreUrl: (cardSlug, setCode, frameEffect = null) => {
+      const effectPart = frameEffect ? `${frameEffect}-` : "";
+      return `https://store.401games.ca/products/${cardSlug}-${effectPart}${setCode}`;
+    },
+  },
+};
 
 /**
  * Detect frame effect from Scryfall card data
@@ -60,8 +91,11 @@ function normalizeFrameEffect(frameEffect, storeKey) {
 
 /**
  * Convert string to kebab-case for URLs
+ * Handles double-faced cards by taking only the first part
  * @param {string} str - The string to convert
  * @returns {string} - Kebab-cased string
+ * @example toKebabCase("Lightning Bolt") => "lightning-bolt"
+ * @example toKebabCase("Delver // Insectile Aberration") => "delver"
  */
 function toKebabCase(str) {
   // Handle double-faced cards (e.g., "Card // Card") - take only first part
@@ -75,30 +109,29 @@ function toKebabCase(str) {
 }
 
 /**
- * Create a URL-friendly slug from a card name
- * @param {string} cardName - The card name to convert
- * @returns {string} - URL-friendly card slug
+ * Store key mappings for consistent naming
  */
-function createCardSlug(cardName) {
-  // Handle double-faced cards (e.g., "Card // Card") - take only first part
-  const firstPart = cardName.split("//")[0].trim();
-
-  return firstPart
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
+const STORE_KEY_MAP = {
+  f2f: "face-to-face",
+  hoc: "house-of-cards",
+  "401games": "401games",
+  // Reverse mappings
+  "face-to-face": "Face to Face Games",
+  "house-of-cards": "House of Cards",
+};
 
 /**
  * Format store name for display
- * @param {string} store - The store key (face-to-face, house-of-cards, 401games)
+ * @param {string} store - The store key (f2f, hoc, 401games, face-to-face, house-of-cards)
  * @returns {string} - Formatted store name
  */
 function formatStoreName(store) {
   const names = {
+    f2f: "Face to Face Games",
+    hoc: "House of Cards",
+    "401games": "401 Games",
     "face-to-face": "Face to Face Games",
     "house-of-cards": "House of Cards",
-    "401games": "401 Games",
   };
   return names[store] || store;
 }
@@ -107,7 +140,7 @@ function formatStoreName(store) {
  * Build API URL for a specific store
  * @param {string} storeKey - The store key (f2f, hoc, 401games)
  * @param {Object} card - Scryfall card object
- * @returns {string} - API URL for fetching price
+ * @returns {string|null} - API URL for fetching price
  */
 function buildStoreApiUrl(storeKey, card) {
   const cardSlug = toKebabCase(card.name);
@@ -136,17 +169,70 @@ function buildStoreApiUrl(storeKey, card) {
 }
 
 /**
+ * Build direct store URL for a card
+ * @param {string} storeKey - The store key (f2f, hoc, 401games)
+ * @param {Object} card - Scryfall card object
+ * @returns {string|null} - Direct URL to product page on store website
+ */
+function buildDirectStoreUrl(storeKey, card) {
+  const store = STORE_CONFIG[storeKey];
+  if (!store) return null;
+
+  const cardSlug = toKebabCase(card.name);
+  const setSlug = toKebabCase(card.set_name);
+  const collectorNumber = card.collector_number;
+  const setCode = card.set;
+  const frameEffect = detectFrameEffect(card);
+
+  if (storeKey === "f2f") {
+    const normalizedEffect = frameEffect
+      ? normalizeFrameEffect(frameEffect, "f2f")
+      : null;
+    return store.buildStoreUrl(
+      cardSlug,
+      collectorNumber,
+      setSlug,
+      normalizedEffect,
+    );
+  } else if (storeKey === "hoc") {
+    return store.buildStoreUrl(cardSlug, setSlug, frameEffect);
+  } else if (storeKey === "401games") {
+    const normalizedEffect = frameEffect
+      ? normalizeFrameEffect(frameEffect, "401games")
+      : null;
+    return store.buildStoreUrl(cardSlug, setCode, normalizedEffect);
+  }
+  return null;
+}
+
+/**
  * Fetch price from a specific store for a card
  * @param {string} storeKey - The store key (f2f, hoc, 401games)
  * @param {Object} card - Scryfall card object
- * @returns {Promise<Object|null>} - Price data or null
+ * @returns {Promise<Object|null>} - Price data {price, url} or null if unavailable
  */
 async function fetchStorePrice(storeKey, card) {
   const url = buildStoreApiUrl(storeKey, card);
-  if (!url) return null;
+  if (!url) {
+    console.error(`Invalid store key: ${storeKey}`);
+    return null;
+  }
 
   try {
     const response = await fetch(url);
+
+    // Handle error responses
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.log(`${storeKey}: Card not found at store`);
+      } else if (response.status === 429) {
+        console.warn(`${storeKey}: Rate limited by store`);
+      } else {
+        console.error(`${storeKey}: HTTP ${response.status}`);
+      }
+      return null;
+    }
+
     const data = await response.json();
 
     if (data.price && data.price !== "N/A") {
@@ -162,7 +248,7 @@ async function fetchStorePrice(storeKey, card) {
       };
     }
   } catch (error) {
-    console.error(`Error fetching ${storeKey} price:`, error);
+    console.error(`Error fetching ${storeKey} price:`, error.message);
   }
   return null;
 }

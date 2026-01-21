@@ -1,5 +1,20 @@
-// Constants
-let USD_TO_CAD = 1.35; // Default fallback value
+// =============================================================================
+// CONFIGURATION
+// =============================================================================
+
+/**
+ * Configuration constants
+ */
+const CONFIG = {
+  DEFAULT_USD_TO_CAD: 1.35,
+  AUTOCOMPLETE_DELAY_MS: 300,
+  SCRYFALL_API_BASE: "https://api.scryfall.com",
+};
+
+/**
+ * Exchange rate (updated on page load)
+ */
+let USD_TO_CAD = CONFIG.DEFAULT_USD_TO_CAD;
 
 // Fetch live exchange rate
 async function fetchExchangeRate() {
@@ -13,14 +28,19 @@ async function fetchExchangeRate() {
       console.log(`Updated USD to CAD rate: ${USD_TO_CAD}`);
     }
   } catch (error) {
-    console.warn("Failed to fetch exchange rate, using default 1.35:", error);
+    console.warn(
+      `Failed to fetch exchange rate, using default ${CONFIG.DEFAULT_USD_TO_CAD}:`,
+      error,
+    );
   }
 }
 
-// Fetch exchange rate on page load
+// Initialize on page load
 fetchExchangeRate();
 
-// DOM Elements
+// =============================================================================
+// DOM ELEMENT REFERENCES
+// =============================================================================
 const cardInput = document.getElementById("cardInput");
 const searchBtn = document.getElementById("searchBtn");
 const cardImage = document.getElementById("cardImage");
@@ -35,46 +55,22 @@ const printingsSidebar = document.getElementById("printingsSidebar");
 const printingsList = document.getElementById("printingsList");
 const storeLinks = document.getElementById("storeLinks");
 
-// Store Configuration
+// Store Configuration - now using centralized STORE_CONFIG from utils.js
 const STORES = {
   f2f: {
-    name: "Face to Face Games",
+    name: STORE_CONFIG.f2f.name,
     link: document.getElementById("faceToFaceLink"),
     priceElement: document.getElementById("f2fPrice"),
-    buildUrl: (cardSlug, collectorNumber, setSlug, frameEffect = null) => {
-      const effectPart = frameEffect ? `${frameEffect}-` : "";
-      return `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${effectPart}${setSlug}-non-foil`;
-    },
-    apiUrl: (cardSlug, collectorNumber, setSlug, frameEffect = null) => {
-      const effectPart = frameEffect ? `${frameEffect}/` : "";
-      return `${API_BASE}/price/f2f/${cardSlug}/${collectorNumber}/${effectPart}${setSlug}`;
-    },
   },
   hoc: {
-    name: "House of Cards",
+    name: STORE_CONFIG.hoc.name,
     link: document.getElementById("houseOfCardsLink"),
     priceElement: document.getElementById("hocPrice"),
-    buildUrl: (cardSlug, setSlug, frameEffect = null) => {
-      const effectPart = frameEffect ? `${frameEffect}-` : "";
-      return `https://houseofcards.ca/products/${cardSlug}-${effectPart}${setSlug}`;
-    },
-    apiUrl: (cardSlug, setSlug, frameEffect = null) => {
-      const effectPart = frameEffect ? `${frameEffect}/` : "";
-      return `${API_BASE}/price/hoc/${cardSlug}/${effectPart}${setSlug}`;
-    },
   },
   "401games": {
-    name: "401 Games",
+    name: STORE_CONFIG["401games"].name,
     link: document.getElementById("games401Link"),
     priceElement: document.getElementById("games401Price"),
-    buildUrl: (cardSlug, setCode, frameEffect = null) => {
-      const effectPart = frameEffect ? `${frameEffect}-` : "";
-      return `https://store.401games.ca/products/${cardSlug}-${effectPart}${setCode}`;
-    },
-    apiUrl: (cardSlug, setCode, frameEffect = null) => {
-      const effectPart = frameEffect ? `${frameEffect}/` : "";
-      return `${API_BASE}/price/401games/${cardSlug}/${effectPart}${setCode}`;
-    },
   },
 };
 
@@ -117,6 +113,10 @@ document.addEventListener("click", (e) => {
   }
 });
 
+/**
+ * Handle autocomplete suggestions with debouncing
+ * Fetches card suggestions from Scryfall API after delay
+ */
 async function handleAutocomplete() {
   const query = cardInput.value.trim();
 
@@ -224,6 +224,10 @@ function formatPrice(usdPrice) {
 // CARD SEARCH
 // =============================================================================
 
+/**
+ * Search for a card and display the cheapest printing
+ * Fetches all printings from Scryfall and finds lowest USD price
+ */
 async function searchCard() {
   const cardNameValue = cardInput.value.trim();
 
@@ -306,6 +310,10 @@ function showError(message) {
   errorMessage.classList.add("show");
 }
 
+/**
+ * Display card information and set up store links
+ * @param {Object} card - Scryfall card object
+ */
 function displayCard(card) {
   // Get the card image URL (preferring normal size)
   const imageUrl =
@@ -341,36 +349,18 @@ function displayCard(card) {
 // STORE LINKS AND PRICES
 // =============================================================================
 
+/**
+ * Set up store links and fetch prices from all three stores
+ * Uses centralized functions from utils.js for URL building and price fetching
+ * @param {Object} card - Scryfall card object
+ */
 function setStoreLinks(card) {
-  const cardSlug = toKebabCase(card.name);
-  const setSlug = toKebabCase(card.set_name);
-  const collectorNumber = card.collector_number;
-  const setCode = card.set;
   const storePrices = {};
 
-  // Detect frame effect variants
-  const frameEffect = detectFrameEffect(card);
-
-  // Build URLs for each store based on their requirements
-  const storeParams = {
-    f2f: [
-      cardSlug,
-      collectorNumber,
-      setSlug,
-      normalizeFrameEffect(frameEffect, "f2f"),
-    ],
-    hoc: [cardSlug, setSlug, frameEffect],
-    "401games": [
-      cardSlug,
-      setCode,
-      normalizeFrameEffect(frameEffect, "401games"),
-    ],
-  };
-
-  // Set up each store
+  // Set up each store using centralized functions from utils.js
   Object.entries(STORES).forEach(([key, store]) => {
-    // Set store URL using appropriate parameters
-    store.link.href = store.buildUrl(...storeParams[key]);
+    // Build direct store URL using centralized function
+    store.link.href = buildDirectStoreUrl(key, card);
 
     // Reset price display
     updatePriceDisplay(store.priceElement, "loading");
@@ -386,26 +376,43 @@ function setStoreLinks(card) {
   // Show the links section
   storeLinks.classList.add("show");
 
-  // Fetch all prices in parallel
+  // Fetch all prices in parallel using centralized fetchStorePrice from utils.js
   Promise.all([
-    fetchStorePrice(
-      "f2f",
-      cardSlug,
-      collectorNumber,
-      setSlug,
-      storePrices,
-      normalizeFrameEffect(frameEffect, "f2f"),
-    ),
-    fetchStorePrice("hoc", cardSlug, null, setSlug, storePrices, frameEffect),
-    fetchStorePrice(
-      "401games",
-      cardSlug,
-      null,
-      setCode,
-      storePrices,
-      normalizeFrameEffect(frameEffect, "401games"),
-    ),
-  ]).then(() => {
+    fetchStorePrice("f2f", card),
+    fetchStorePrice("hoc", card),
+    fetchStorePrice("401games", card),
+  ]).then(([f2fData, hocData, games401Data]) => {
+    // Update F2F
+    if (f2fData && f2fData.price) {
+      storePrices.f2f.price = f2fData.price;
+      updatePriceDisplay(STORES.f2f.priceElement, "success", f2fData.price);
+    } else {
+      updatePriceDisplay(STORES.f2f.priceElement, "unavailable");
+      storePrices.f2f.price = Infinity;
+    }
+
+    // Update HOC
+    if (hocData && hocData.price) {
+      storePrices.hoc.price = hocData.price;
+      updatePriceDisplay(STORES.hoc.priceElement, "success", hocData.price);
+    } else {
+      updatePriceDisplay(STORES.hoc.priceElement, "unavailable");
+      storePrices.hoc.price = Infinity;
+    }
+
+    // Update 401 Games
+    if (games401Data && games401Data.price) {
+      storePrices["401games"].price = games401Data.price;
+      updatePriceDisplay(
+        STORES["401games"].priceElement,
+        "success",
+        games401Data.price,
+      );
+    } else {
+      updatePriceDisplay(STORES["401games"].priceElement, "unavailable");
+      storePrices["401games"].price = Infinity;
+    }
+
     sortStoresByPrice(storePrices);
   });
 }
@@ -429,45 +436,13 @@ function updatePriceDisplay(priceElement, status, price = null) {
   }
 }
 
-async function fetchStorePrice(
-  storeKey,
-  cardSlug,
-  collectorNumber,
-  setSlug,
-  storePrices,
-  frameEffect = null,
-) {
-  const store = STORES[storeKey];
-  const priceElement = store.priceElement;
+// fetchStorePrice is now centralized in utils.js
 
-  try {
-    // Build API URL based on store
-    let url;
-    if (storeKey === "f2f") {
-      url = store.apiUrl(cardSlug, collectorNumber, setSlug, frameEffect);
-    } else if (storeKey === "hoc") {
-      url = store.apiUrl(cardSlug, setSlug, frameEffect);
-    } else if (storeKey === "401games") {
-      url = store.apiUrl(cardSlug, setSlug, frameEffect); // setSlug is actually setCode here
-    }
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.price) {
-      updatePriceDisplay(priceElement, "success", data.price);
-      storePrices[storeKey].price = data.price;
-    } else {
-      updatePriceDisplay(priceElement, "unavailable");
-      storePrices[storeKey].price = Infinity;
-    }
-  } catch (error) {
-    console.error(`Error fetching ${store.name} price:`, error);
-    updatePriceDisplay(priceElement, "error");
-    storePrices[storeKey].price = Infinity;
-  }
-}
-
+/**
+ * Sort and reorder store links by price (lowest first)
+ * Highlights the cheapest store
+ * @param {Object} storePrices - Object with store keys and price data
+ */
 function sortStoresByPrice(storePrices) {
   // Create array of stores with their prices
   const storesArray = Object.entries(storePrices).map(([key, value]) => ({
@@ -518,6 +493,11 @@ function displayPrice(prices) {
 // PRINTINGS SIDEBAR
 // =============================================================================
 
+/**
+ * Display all available printings in the sidebar
+ * @param {Array} printings - Array of Scryfall card objects
+ * @param {string} currentCardId - ID of currently selected card
+ */
 function displayPrintings(printings, currentCardId) {
   printingsList.innerHTML = "";
 
