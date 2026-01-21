@@ -12,6 +12,52 @@ const DECK_EVAL_CONFIG = {
 };
 
 /**
+ * Basic lands to ignore in deck evaluation
+ */
+const BASIC_LANDS = ["mountain", "island", "plains", "swamp", "forest"];
+
+/**
+ * Frame effects that are considered "special" printings
+ */
+const SPECIAL_FRAME_EFFECTS = [
+  "borderless",
+  "extendedart",
+  "showcase",
+  "inverted",
+];
+
+/**
+ * Check if a card name is a basic land
+ * @param {string} cardName - The card name to check
+ * @returns {boolean} - True if the card is a basic land
+ */
+function isBasicLand(cardName) {
+  const normalized = cardName.toLowerCase().trim();
+  return BASIC_LANDS.includes(normalized);
+}
+
+/**
+ * Check if a card has special frame effects or is a promo card
+ * @param {Object} card - Scryfall card object
+ * @returns {boolean} - True if the card has special frame effects or is a promo
+ */
+function hasSpecialFrameEffect(card) {
+  // Check for special frame effects
+  const hasSpecialFrame =
+    card.frame_effects &&
+    card.frame_effects.length > 0 &&
+    card.frame_effects.some((effect) => SPECIAL_FRAME_EFFECTS.includes(effect));
+
+  // Check if it's a promo card (using same logic as utils.js isPromoCard)
+  const isPromo =
+    card.promo_types &&
+    Array.isArray(card.promo_types) &&
+    card.promo_types.some((type) => type.toLowerCase().includes("promopack"));
+
+  return hasSpecialFrame || isPromo;
+}
+
+/**
  * Parse deck list from textarea
  * Supports formats: "4x Lightning Bolt", "4 Lightning Bolt", "Lightning Bolt"
  * @param {string} deckText - Raw deck list text
@@ -88,19 +134,29 @@ async function getPricesForPrinting(printing) {
  * Find the cheapest printing of a card across all stores
  * Prioritizes cards with USD prices, falls back to first printing
  * @param {string} cardName - The card name to search for
+ * @param {boolean} excludeSpecial - Whether to exclude special frame effects
  * @returns {Promise<Object>} - Result object with price, store, URL, and printing info
  */
-async function findCheapestPrinting(cardName) {
+async function findCheapestPrinting(cardName, excludeSpecial = false) {
   const printings = await getCardPrintings(cardName);
   if (printings.length === 0) {
     return { error: "Card not found" };
+  }
+
+  // Filter out special printings if requested
+  const filteredPrintings = excludeSpecial
+    ? printings.filter((card) => !hasSpecialFrameEffect(card))
+    : printings;
+
+  if (filteredPrintings.length === 0) {
+    return { error: "No standard printings found" };
   }
 
   // Find the cheapest printing by Scryfall USD price (same logic as main search)
   let cheapestCard = null;
   let lowestPrice = Infinity;
 
-  for (const card of printings) {
+  for (const card of filteredPrintings) {
     if (card.prices && card.prices.usd) {
       const price = parseFloat(card.prices.usd);
       if (price > 0 && price < lowestPrice) {
@@ -112,7 +168,7 @@ async function findCheapestPrinting(cardName) {
 
   // If no card with USD price found, use the first printing
   if (!cheapestCard) {
-    cheapestCard = printings[0];
+    cheapestCard = filteredPrintings[0];
   }
 
   // Now check all 3 stores for this one printing
@@ -157,24 +213,41 @@ async function evaluateDeck() {
     return;
   }
 
+  // Get filter options
+  const excludeBasicLands =
+    document.getElementById("excludeBasicLands").checked;
+  const excludeSpecial = document.getElementById(
+    "excludeSpecialPrintings",
+  ).checked;
+
+  // Filter out basic lands if option is checked
+  const filteredCards = excludeBasicLands
+    ? cards.filter((card) => !isBasicLand(card.name))
+    : cards;
+
+  if (filteredCards.length === 0) {
+    showError("No cards to evaluate");
+    return;
+  }
+
   showLoading(true);
   hideError();
   document.getElementById("resultsSection").style.display = "none";
 
   const results = [];
 
-  for (const card of cards) {
-    const result = await findCheapestPrinting(card.name);
+  for (const card of filteredCards) {
+    const result = await findCheapestPrinting(card.name, excludeSpecial);
     results.push({
       ...card,
       ...result,
     });
 
     // Update progress
-    updateProgress(results.length, cards.length);
+    updateProgress(results.length, filteredCards.length);
 
     // Add delay between cards to prevent rate limiting
-    if (results.length < cards.length) {
+    if (results.length < filteredCards.length) {
       await new Promise((resolve) =>
         setTimeout(resolve, DECK_EVAL_CONFIG.DELAY_BETWEEN_CARDS_MS),
       );
