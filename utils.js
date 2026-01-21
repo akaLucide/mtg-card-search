@@ -257,9 +257,11 @@ function buildDirectStoreUrl(storeKey, card) {
  * Fetch price from a specific store for a card
  * @param {string} storeKey - The store key (f2f, hoc, 401games)
  * @param {Object} card - Scryfall card object
+ * @param {number} retryCount - Current retry attempt (default 0)
+ * @param {number} maxRetries - Maximum number of retries (default 3)
  * @returns {Promise<Object|null>} - Price data {price, url} or null if unavailable
  */
-async function fetchStorePrice(storeKey, card) {
+async function fetchStorePrice(storeKey, card, retryCount = 0, maxRetries = 3) {
   const url = buildStoreApiUrl(storeKey, card);
   if (!url) {
     console.error(`Invalid store key: ${storeKey}`);
@@ -273,8 +275,20 @@ async function fetchStorePrice(storeKey, card) {
     if (!response.ok) {
       if (response.status === 404) {
         console.log(`${storeKey}: Card not found at store`);
+        return null;
       } else if (response.status === 429) {
-        console.warn(`${storeKey}: Rate limited by store`);
+        // Rate limited - retry with exponential backoff
+        if (retryCount < maxRetries) {
+          const delayMs = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+          console.warn(
+            `${storeKey}: Rate limited, retrying in ${delayMs}ms (attempt ${retryCount + 1}/${maxRetries})`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          return fetchStorePrice(storeKey, card, retryCount + 1, maxRetries);
+        } else {
+          console.warn(`${storeKey}: Rate limited, max retries exceeded`);
+          return null;
+        }
       } else {
         console.error(`${storeKey}: HTTP ${response.status}`);
       }

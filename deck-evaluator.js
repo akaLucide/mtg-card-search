@@ -7,7 +7,7 @@
  * Configuration constants
  */
 const DECK_EVAL_CONFIG = {
-  DELAY_BETWEEN_CARDS_MS: 300, // Delay to prevent rate limiting
+  DELAY_BETWEEN_CARDS_MS: 100, // Delay to prevent rate limiting
   DEFAULT_QUANTITY: 1,
 };
 
@@ -116,7 +116,7 @@ async function getCardPrintings(cardName) {
 async function getPricesForPrinting(printing) {
   const prices = {};
 
-  // Fetch from all stores using shared utility function
+  // Fetch from all stores in parallel using shared utility function
   const [f2fPrice, hocPrice, games401Price] = await Promise.all([
     fetchStorePrice("f2f", printing),
     fetchStorePrice("hoc", printing),
