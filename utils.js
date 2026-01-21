@@ -13,19 +13,20 @@ const API_BASE = "http://localhost:3000/api";
 // =============================================================================
 
 /**
- * Check if a card is a promo card based on Scryfall data
+ * Check if a card is a promo pack card based on Scryfall data
+ * Only cards with "promopack" in promo_types should use promo-pack URLs
  * @param {Object} card - Scryfall card object
- * @returns {boolean} - True if the card is a promo
+ * @returns {boolean} - True if the card is a promo pack card
  */
 function isPromoCard(card) {
   if (!card) return false;
 
-  // Check if the card has promo flag or promo_types
-  const hasPromoFlag = card.promo === true;
-  const hasPromoTypes = card.promo_types && card.promo_types.length > 0;
-  const isPromoSet = card.set_type === "promo";
+  // Check if the card specifically has "promopack" in promo_types
+  // Other promo_types like "beginnerbox", "universesbeyond", etc. don't use promo-pack URLs
+  const hasPromoPackType =
+    card.promo_types && card.promo_types.includes("promopack");
 
-  return hasPromoFlag || hasPromoTypes || isPromoSet;
+  return hasPromoPackType;
 }
 
 /**
