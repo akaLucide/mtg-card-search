@@ -77,6 +77,11 @@ const STORE_CONFIG = {
 function detectFrameEffect(card) {
   if (!card) return null;
 
+  // Check for future frame (similar to retro frame detection)
+  if (card.frame === "future") {
+    return "future-frame";
+  }
+
   // Check frame_effects array
   if (card.frame_effects && card.frame_effects.length > 0) {
     const effect = card.frame_effects[0];
@@ -88,6 +93,11 @@ function detectFrameEffect(card) {
   // Check border_color for borderless cards
   if (card.border_color === "borderless") {
     return "borderless";
+  }
+
+  // Check for white border (Mystery Booster 2, etc.)
+  if (card.border_color === "white") {
+    return "white-border";
   }
 
   // Check for retro frame (1997 old-style frame from reprints)
@@ -116,6 +126,28 @@ function normalizeFrameEffect(frameEffect, storeKey) {
   ) {
     return "retro-frame";
   }
+
+  // Handle future-frame for different stores
+  if (frameEffect === "future-frame") {
+    if (storeKey === "hoc") {
+      return "future-sight";
+    }
+    if (storeKey === "f2f") {
+      return "future-frame";
+    }
+    if (storeKey === "401games") {
+      return null; // 401 Games doesn't need frame effect in URL for future frames
+    }
+  }
+
+  // Handle white-border for different stores
+  if (frameEffect === "white-border") {
+    if (storeKey === "401games") {
+      return null; // 401 Games doesn't need white-border in URL
+    }
+    return "white-border"; // F2F and HOC use white-border
+  }
+
   return frameEffect;
 }
 
@@ -200,7 +232,10 @@ function buildStoreApiUrl(storeKey, card) {
     const promoPart = isPromo ? "promo-pack/" : "";
     return `${API_BASE}/price/f2f/${cardSlug}/${collectorNumber}/${promoPart}${effectPart}${setSlug}`;
   } else if (storeKey === "hoc") {
-    const effectPart = frameEffect ? `${frameEffect}/` : "";
+    const normalizedEffect = frameEffect
+      ? normalizeFrameEffect(frameEffect, "hoc")
+      : null;
+    const effectPart = normalizedEffect ? `${normalizedEffect}/` : "";
     const promoPart = isPromo ? "promo-pack/" : "";
     return `${API_BASE}/price/hoc/${cardSlug}/${promoPart}${effectPart}${setSlug}`;
   } else if (storeKey === "401games") {
@@ -243,7 +278,10 @@ function buildDirectStoreUrl(storeKey, card) {
       isPromo,
     );
   } else if (storeKey === "hoc") {
-    return store.buildStoreUrl(cardSlug, setSlug, frameEffect, isPromo);
+    const normalizedEffect = frameEffect
+      ? normalizeFrameEffect(frameEffect, "hoc")
+      : null;
+    return store.buildStoreUrl(cardSlug, setSlug, normalizedEffect, isPromo);
   } else if (storeKey === "401games") {
     const normalizedEffect = frameEffect
       ? normalizeFrameEffect(frameEffect, "401games")
