@@ -121,17 +121,29 @@ function normalizeFrameEffect(frameEffect, storeKey) {
 
 /**
  * Convert string to kebab-case for URLs
- * Handles double-faced cards by taking only the first part
+ * Handles double-faced cards by converting both faces
  * @param {string} str - The string to convert
  * @returns {string} - Kebab-cased string
  * @example toKebabCase("Lightning Bolt") => "lightning-bolt"
- * @example toKebabCase("Delver // Insectile Aberration") => "delver"
+ * @example toKebabCase("Ajani, Nacatl Pariah // Ajani, Nacatl Avenger") => "ajani-nacatl-pariah-ajani-nacatl-avenger"
  */
 function toKebabCase(str) {
-  // Handle double-faced cards (e.g., "Card // Card") - take only first part
-  const firstPart = str.split("//")[0].trim();
+  // Handle double-faced cards (e.g., "Card // Card") - convert both parts
+  if (str.includes("//")) {
+    const parts = str.split("//").map((part) => part.trim());
+    return parts
+      .map((part) =>
+        part
+          .toLowerCase()
+          .replace(/'/g, "") // Remove apostrophes first
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, ""),
+      )
+      .join("-");
+  }
 
-  return firstPart
+  // Single-faced cards
+  return str
     .toLowerCase()
     .replace(/'/g, "") // Remove apostrophes first
     .replace(/[^a-z0-9]+/g, "-")
