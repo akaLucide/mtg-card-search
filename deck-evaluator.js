@@ -117,10 +117,6 @@ async function findCheapestPrinting(cardName) {
 
   // Now check all 3 stores for this one printing
   const prices = await getPricesForPrinting(cheapestCard);
-  console.log(
-    `${cheapestCard.set_name}: Found ${Object.keys(prices).length} prices`,
-    prices,
-  );
 
   // Find the cheapest store for this printing
   let cheapestStore = null;
@@ -148,7 +144,6 @@ async function findCheapestPrinting(cardName) {
     allStorePrices: prices,
   };
 
-  console.log("Cheapest overall:", result);
   return result;
 }
 

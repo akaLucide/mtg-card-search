@@ -8,6 +8,26 @@
  */
 const API_BASE = "http://localhost:3000/api";
 
+// =============================================================================
+// PROMO CARD DETECTION
+// =============================================================================
+
+/**
+ * Check if a card is a promo card based on Scryfall data
+ * @param {Object} card - Scryfall card object
+ * @returns {boolean} - True if the card is a promo
+ */
+function isPromoCard(card) {
+  if (!card) return false;
+
+  // Check if the card has promo flag or promo_types
+  const hasPromoFlag = card.promo === true;
+  const hasPromoTypes = card.promo_types && card.promo_types.length > 0;
+  const isPromoSet = card.set_type === "promo";
+
+  return hasPromoFlag || hasPromoTypes || isPromoSet;
+}
+
 /**
  * Store Configuration
  * Centralized configuration for all three Canadian MTG stores
@@ -16,25 +36,34 @@ const STORE_CONFIG = {
   f2f: {
     name: "Face to Face Games",
     key: "f2f",
-    buildStoreUrl: (cardSlug, collectorNumber, setSlug, frameEffect = null) => {
+    buildStoreUrl: (
+      cardSlug,
+      collectorNumber,
+      setSlug,
+      frameEffect = null,
+      isPromo = false,
+    ) => {
       const effectPart = frameEffect ? `${frameEffect}-` : "";
-      return `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${effectPart}${setSlug}-non-foil`;
+      const promoPart = isPromo ? "promo-pack-" : "";
+      return `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${promoPart}${effectPart}${setSlug}-non-foil`;
     },
   },
   hoc: {
     name: "House of Cards",
     key: "hoc",
-    buildStoreUrl: (cardSlug, setSlug, frameEffect = null) => {
+    buildStoreUrl: (cardSlug, setSlug, frameEffect = null, isPromo = false) => {
       const effectPart = frameEffect ? `${frameEffect}-` : "";
-      return `https://houseofcards.ca/products/${cardSlug}-${effectPart}${setSlug}`;
+      const promoPart = isPromo ? "promo-pack-" : "";
+      return `https://houseofcards.ca/products/${cardSlug}-${promoPart}${effectPart}${setSlug}`;
     },
   },
   "401games": {
     name: "401 Games",
     key: "401games",
-    buildStoreUrl: (cardSlug, setCode, frameEffect = null) => {
+    buildStoreUrl: (cardSlug, setCode, frameEffect = null, isPromo = false) => {
       const effectPart = frameEffect ? `${frameEffect}-` : "";
-      return `https://store.401games.ca/products/${cardSlug}-${effectPart}${setCode}`;
+      const promoPart = isPromo ? "promo-pack-" : "";
+      return `https://store.401games.ca/products/${cardSlug}-${promoPart}${effectPart}${setCode}`;
     },
   },
 };
@@ -148,22 +177,26 @@ function buildStoreApiUrl(storeKey, card) {
   const collectorNumber = card.collector_number;
   const setCode = card.set;
   const frameEffect = detectFrameEffect(card);
+  const isPromo = isPromoCard(card);
 
   if (storeKey === "f2f") {
     const normalizedEffect = frameEffect
       ? normalizeFrameEffect(frameEffect, "f2f")
       : null;
     const effectPart = normalizedEffect ? `${normalizedEffect}/` : "";
-    return `${API_BASE}/price/f2f/${cardSlug}/${collectorNumber}/${effectPart}${setSlug}`;
+    const promoPart = isPromo ? "promo-pack/" : "";
+    return `${API_BASE}/price/f2f/${cardSlug}/${collectorNumber}/${promoPart}${effectPart}${setSlug}`;
   } else if (storeKey === "hoc") {
     const effectPart = frameEffect ? `${frameEffect}/` : "";
-    return `${API_BASE}/price/hoc/${cardSlug}/${effectPart}${setSlug}`;
+    const promoPart = isPromo ? "promo-pack/" : "";
+    return `${API_BASE}/price/hoc/${cardSlug}/${promoPart}${effectPart}${setSlug}`;
   } else if (storeKey === "401games") {
     const normalizedEffect = frameEffect
       ? normalizeFrameEffect(frameEffect, "401games")
       : null;
     const effectPart = normalizedEffect ? `${normalizedEffect}/` : "";
-    return `${API_BASE}/price/401games/${cardSlug}/${effectPart}${setCode}`;
+    const promoPart = isPromo ? "promo-pack/" : "";
+    return `${API_BASE}/price/401games/${cardSlug}/${promoPart}${effectPart}${setCode}`;
   }
   return null;
 }
@@ -183,6 +216,7 @@ function buildDirectStoreUrl(storeKey, card) {
   const collectorNumber = card.collector_number;
   const setCode = card.set;
   const frameEffect = detectFrameEffect(card);
+  const isPromo = isPromoCard(card);
 
   if (storeKey === "f2f") {
     const normalizedEffect = frameEffect
@@ -193,14 +227,15 @@ function buildDirectStoreUrl(storeKey, card) {
       collectorNumber,
       setSlug,
       normalizedEffect,
+      isPromo,
     );
   } else if (storeKey === "hoc") {
-    return store.buildStoreUrl(cardSlug, setSlug, frameEffect);
+    return store.buildStoreUrl(cardSlug, setSlug, frameEffect, isPromo);
   } else if (storeKey === "401games") {
     const normalizedEffect = frameEffect
       ? normalizeFrameEffect(frameEffect, "401games")
       : null;
-    return store.buildStoreUrl(cardSlug, setCode, normalizedEffect);
+    return store.buildStoreUrl(cardSlug, setCode, normalizedEffect, isPromo);
   }
   return null;
 }
