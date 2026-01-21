@@ -174,19 +174,26 @@ async function findCheapestPrinting(cardName, excludeSpecial = false) {
   // Now check all 3 stores for this one printing
   const prices = await getPricesForPrinting(cheapestCard);
 
+  // Track all store prices including errors
+  const allStorePrices = {
+    "face-to-face": prices["face-to-face"] || { error: "Not available" },
+    "house-of-cards": prices["house-of-cards"] || { error: "Not available" },
+    "401games": prices["401games"] || { error: "Not available" },
+  };
+
   // Find the cheapest store for this printing
   let cheapestStore = null;
   let cheapestPrice = Infinity;
 
   for (const [store, priceData] of Object.entries(prices)) {
-    if (priceData.price < cheapestPrice) {
+    if (priceData.price && priceData.price < cheapestPrice) {
       cheapestPrice = priceData.price;
       cheapestStore = store;
     }
   }
 
   if (!cheapestStore) {
-    return { error: "No prices found" };
+    return { error: "No prices found", allStorePrices };
   }
 
   const result = {
@@ -197,7 +204,7 @@ async function findCheapestPrinting(cardName, excludeSpecial = false) {
     cardName: cheapestCard.name,
     setCode: cheapestCard.set,
     collectorNumber: cheapestCard.collector_number,
-    allStorePrices: prices,
+    allStorePrices: allStorePrices,
   };
 
   return result;
@@ -300,45 +307,143 @@ function displayResults(results) {
   };
 
   // Display individual card results
-  let html = '<div class="card-list">';
+  let html = '<div class="card-grid">';
 
   for (const result of results) {
-    if (result.error) {
+    if (result.error && !result.allStorePrices) {
       html += `
-        <div class="card-result error">
-          <div class="card-result-header">
+        <div class="card-result-line error">
+          <div class="card-info-section">
             <span class="card-quantity">${result.quantity}x</span>
             <span class="card-name">${result.name}</span>
           </div>
-          <div class="card-result-error">${result.error}</div>
+          <div class="card-error-message">${result.error}</div>
         </div>
       `;
       continue;
     }
 
     const storeName = formatStoreName(result.store);
+    const allStores = [
+      { key: "face-to-face", emoji: "🛡️", name: "F2F" },
+      { key: "house-of-cards", emoji: "🃏", name: "HOC" },
+      { key: "401games", emoji: "🎲", name: "401" },
+    ];
+
+    // Build price list with cheapest first, others smaller
+    let pricesHtml = "";
+
+    // Sort stores by price (cheapest first)
+    const sortedStores = allStores
+      .map((store) => ({
+        ...store,
+        priceData: result.allStorePrices?.[store.key],
+      }))
+      .sort((a, b) => {
+        const priceA = a.priceData?.price || Infinity;
+        const priceB = b.priceData?.price || Infinity;
+        return priceA - priceB;
+      });
+
+    sortedStores.forEach((store, index) => {
+      const priceData = store.priceData;
+
+      if (index === 0 && priceData?.price) {
+        // Cheapest store - full display with link
+        pricesHtml += `
+          <div class="price-main">
+            <div class="price-value">$${priceData.price.toFixed(2)}</div>
+            <div class="store-badge">${formatStoreName(store.key)}</div>
+            <a href="${priceData.url}" target="_blank" class="buy-link">View on ${formatStoreName(store.key)}</a>
+          </div>
+        `;
+      } else {
+        // Other stores - compact display
+        if (priceData?.error) {
+          pricesHtml += `
+            <div class="price-secondary">
+              <span class="store-emoji">${store.emoji}</span>
+              <span class="store-abbr">${store.name}</span>
+              <span class="price-error">Error</span>
+            </div>
+          `;
+        } else if (priceData?.price) {
+          pricesHtml += `
+            <div class="price-secondary">
+              <span class="store-emoji">${store.emoji}</span>
+              <span class="store-abbr">${store.name}</span>
+              <span class="price-small">$${priceData.price.toFixed(2)}</span>
+            </div>
+          `;
+        } else {
+          pricesHtml += `
+            <div class="price-secondary">
+              <span class="store-emoji">${store.emoji}</span>
+              <span class="store-abbr">${store.name}</span>
+              <span class="price-error">N/A</span>
+            </div>
+          `;
+        }
+      }
+    });
+
+    // Separate main price from secondary prices
+    const mainPriceMatch = pricesHtml.match(
+      /<div class="price-main">.*?<\/div>/s,
+    );
+    const mainPriceHtml = mainPriceMatch ? mainPriceMatch[0] : "";
+
+    // Build store prices in compact format
+    let allPricesHtml = "";
+    sortedStores.forEach((store) => {
+      const priceData = store.priceData;
+      if (priceData?.price) {
+        allPricesHtml += `
+          <div class="store-price-item ${store.key === result.store ? "cheapest" : ""}">
+            <span class="store-icon">${store.emoji}</span>
+            <span class="store-label">${store.name}</span>
+            <span class="price-text">$${priceData.price.toFixed(2)}</span>
+          </div>
+        `;
+      } else if (priceData?.error) {
+        allPricesHtml += `
+          <div class="store-price-item">
+            <span class="store-icon">${store.emoji}</span>
+            <span class="store-label">${store.name}</span>
+            <span class="price-text error">Error</span>
+          </div>
+        `;
+      } else {
+        allPricesHtml += `
+          <div class="store-price-item">
+            <span class="store-icon">${store.emoji}</span>
+            <span class="store-label">${store.name}</span>
+            <span class="price-text error">N/A</span>
+          </div>
+        `;
+      }
+    });
 
     html += `
-      <div class="card-result">
-        <div class="card-result-header">
+      <div class="card-result-line">
+        <div class="card-info-section">
           <span class="card-quantity">${result.quantity}x</span>
-          <span class="card-name">${result.cardName}</span>
+          <span class="card-name">${result.cardName || result.name}</span>
+          <span class="printing-info">${result.printing || ""}</span>
         </div>
-        <div class="card-result-details">
-          <div class="printing-info">${result.printing}</div>
-          <div class="price-info">
-            <span class="price">$${result.price.toFixed(2)}</span>
-            <span class="store-badge">${storeName}</span>
-          </div>
-          <a href="${result.url}" target="_blank" class="buy-link">View on ${storeName}</a>
+        <div class="card-prices-section">
+          ${allPricesHtml}
         </div>
+        ${result.url ? `<a href="${result.url}" target="_blank" class="view-link">View</a>` : ""}
       </div>
     `;
 
     // Add to store totals
     if (result.allStorePrices) {
       for (const [store, priceData] of Object.entries(result.allStorePrices)) {
-        totals[store] += priceData.price * result.quantity;
+        if (priceData.price) {
+          totals[store] += priceData.price * result.quantity;
+        }
       }
     }
   }
@@ -347,13 +452,22 @@ function displayResults(results) {
   cardResults.innerHTML = html;
 
   // Display totals
+  const storeEmojis = {
+    "face-to-face": "🛡️",
+    "house-of-cards": "🃏",
+    "401games": "🎲",
+  };
+
   let totalsHtml = '<div class="totals-grid">';
 
   for (const [store, total] of Object.entries(totals)) {
     if (total > 0) {
       totalsHtml += `
         <div class="total-item">
-          <span class="total-store">${formatStoreName(store)}</span>
+          <div class="total-header">
+            <span class="total-emoji">${storeEmojis[store]}</span>
+            <span class="total-store">${formatStoreName(store)}</span>
+          </div>
           <span class="total-price">$${total.toFixed(2)}</span>
         </div>
       `;
