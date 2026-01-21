@@ -207,6 +207,7 @@ async function findCheapestPrinting(cardName, excludeSpecial = false) {
 async function evaluateDeck() {
   const deckText = document.getElementById("deckList").value;
   const cards = parseDeckList(deckText);
+  const evaluateBtn = document.getElementById("evaluateBtn");
 
   if (cards.length === 0) {
     showError("Please enter a valid deck list");
@@ -230,6 +231,8 @@ async function evaluateDeck() {
     return;
   }
 
+  // Disable button to prevent multiple clicks
+  evaluateBtn.disabled = true;
   showLoading(true);
   hideError();
   document.getElementById("resultsSection").style.display = "none";
@@ -256,6 +259,9 @@ async function evaluateDeck() {
 
   showLoading(false);
   displayResults(results);
+
+  // Re-enable button after evaluation completes
+  evaluateBtn.disabled = false;
 }
 
 function updateProgress(current, total) {
