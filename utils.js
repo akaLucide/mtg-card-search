@@ -4,9 +4,100 @@
 // =============================================================================
 
 /**
- * API Base URL
+ * API Constants
  */
 const API_BASE = "http://localhost:3000/api";
+const SCRYFALL_API_BASE = "https://api.scryfall.com";
+const EXCHANGE_RATE_API = "https://api.exchangerate-api.com/v4/latest/USD";
+
+// =============================================================================
+// STORE CONFIGURATION - Single source of truth for all store data
+// =============================================================================
+
+/**
+ * Centralized store configuration
+ * Contains all metadata for the three Canadian MTG stores
+ */
+const STORE_CONFIG = {
+  f2f: {
+    name: "Face to Face Games",
+    key: "f2f",
+    emoji: "🛡️",
+    shortName: "F2F",
+    buildStoreUrl: (
+      cardSlug,
+      collectorNumber,
+      setSlug,
+      frameEffect = null,
+      isPromo = false,
+    ) => {
+      const effectPart = frameEffect ? `${frameEffect}-` : "";
+      const promoPart = isPromo ? "promo-pack-" : "";
+      return `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${promoPart}${effectPart}${setSlug}-non-foil`;
+    },
+  },
+  hoc: {
+    name: "House of Cards",
+    key: "hoc",
+    emoji: "🃏",
+    shortName: "HOC",
+    buildStoreUrl: (cardSlug, setSlug, frameEffect = null, isPromo = false) => {
+      const effectPart = frameEffect ? `${frameEffect}-` : "";
+      const promoPart = isPromo ? "promo-pack-" : "";
+      return `https://houseofcards.ca/products/${cardSlug}-${promoPart}${effectPart}${setSlug}`;
+    },
+  },
+  "401games": {
+    name: "401 Games",
+    key: "401games",
+    emoji: "🎲",
+    shortName: "401",
+    buildStoreUrl: (cardSlug, setCode, frameEffect = null, isPromo = false) => {
+      const effectPart = frameEffect ? `${frameEffect}-` : "";
+      const promoPart = isPromo ? "promo-pack-" : "";
+      return `https://store.401games.ca/products/${cardSlug}-${promoPart}${effectPart}${setCode}`;
+    },
+  },
+};
+
+/**
+ * Get all store keys
+ * @returns {string[]} - Array of store keys ["f2f", "hoc", "401games"]
+ */
+function getStoreKeys() {
+  return Object.keys(STORE_CONFIG);
+}
+
+/**
+ * Format store name for display
+ * Uses STORE_CONFIG as the canonical source
+ * @param {string} storeKey - The store key (f2f, hoc, 401games)
+ * @returns {string} - Formatted store name
+ */
+function formatStoreName(storeKey) {
+  const config = STORE_CONFIG[storeKey];
+  return config ? config.name : storeKey;
+}
+
+/**
+ * Get store emoji
+ * @param {string} storeKey - The store key (f2f, hoc, 401games)
+ * @returns {string} - Store emoji
+ */
+function getStoreEmoji(storeKey) {
+  const config = STORE_CONFIG[storeKey];
+  return config ? config.emoji : "";
+}
+
+/**
+ * Get store short name
+ * @param {string} storeKey - The store key (f2f, hoc, 401games)
+ * @returns {string} - Store short name (F2F, HOC, 401)
+ */
+function getStoreShortName(storeKey) {
+  const config = STORE_CONFIG[storeKey];
+  return config ? config.shortName : storeKey;
+}
 
 // =============================================================================
 // PROMO CARD DETECTION
@@ -29,45 +120,9 @@ function isPromoCard(card) {
   return hasPromoPackType;
 }
 
-/**
- * Store Configuration
- * Centralized configuration for all three Canadian MTG stores
- */
-const STORE_CONFIG = {
-  f2f: {
-    name: "Face to Face Games",
-    key: "f2f",
-    buildStoreUrl: (
-      cardSlug,
-      collectorNumber,
-      setSlug,
-      frameEffect = null,
-      isPromo = false,
-    ) => {
-      const effectPart = frameEffect ? `${frameEffect}-` : "";
-      const promoPart = isPromo ? "promo-pack-" : "";
-      return `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${promoPart}${effectPart}${setSlug}-non-foil`;
-    },
-  },
-  hoc: {
-    name: "House of Cards",
-    key: "hoc",
-    buildStoreUrl: (cardSlug, setSlug, frameEffect = null, isPromo = false) => {
-      const effectPart = frameEffect ? `${frameEffect}-` : "";
-      const promoPart = isPromo ? "promo-pack-" : "";
-      return `https://houseofcards.ca/products/${cardSlug}-${promoPart}${effectPart}${setSlug}`;
-    },
-  },
-  "401games": {
-    name: "401 Games",
-    key: "401games",
-    buildStoreUrl: (cardSlug, setCode, frameEffect = null, isPromo = false) => {
-      const effectPart = frameEffect ? `${frameEffect}-` : "";
-      const promoPart = isPromo ? "promo-pack-" : "";
-      return `https://store.401games.ca/products/${cardSlug}-${promoPart}${effectPart}${setCode}`;
-    },
-  },
-};
+// =============================================================================
+// FRAME EFFECT DETECTION
+// =============================================================================
 
 /**
  * Detect frame effect from Scryfall card data
@@ -117,7 +172,7 @@ function detectFrameEffect(card) {
  * F2F and 401 Games use "retro-frame" instead of "retro"
  * @param {string} frameEffect - The frame effect to normalize
  * @param {string} storeKey - The store key (f2f, hoc, 401games)
- * @returns {string} - Normalized frame effect
+ * @returns {string|null} - Normalized frame effect
  */
 function normalizeFrameEffect(frameEffect, storeKey) {
   if (
@@ -151,6 +206,10 @@ function normalizeFrameEffect(frameEffect, storeKey) {
   return frameEffect;
 }
 
+// =============================================================================
+// STRING UTILITIES
+// =============================================================================
+
 /**
  * Convert string to kebab-case for URLs
  * Handles double-faced cards by converting both faces
@@ -182,33 +241,9 @@ function toKebabCase(str) {
     .replace(/^-+|-+$/g, "");
 }
 
-/**
- * Store key mappings for consistent naming
- */
-const STORE_KEY_MAP = {
-  f2f: "face-to-face",
-  hoc: "house-of-cards",
-  "401games": "401games",
-  // Reverse mappings
-  "face-to-face": "Face to Face Games",
-  "house-of-cards": "House of Cards",
-};
-
-/**
- * Format store name for display
- * @param {string} store - The store key (f2f, hoc, 401games, face-to-face, house-of-cards)
- * @returns {string} - Formatted store name
- */
-function formatStoreName(store) {
-  const names = {
-    f2f: "Face to Face Games",
-    hoc: "House of Cards",
-    "401games": "401 Games",
-    "face-to-face": "Face to Face Games",
-    "house-of-cards": "House of Cards",
-  };
-  return names[store] || store;
-}
+// =============================================================================
+// URL BUILDING
+// =============================================================================
 
 /**
  * Build API URL for a specific store
@@ -291,6 +326,10 @@ function buildDirectStoreUrl(storeKey, card) {
   return null;
 }
 
+// =============================================================================
+// PRICE FETCHING
+// =============================================================================
+
 /**
  * Fetch price from a specific store for a card
  * @param {string} storeKey - The store key (f2f, hoc, 401games)
@@ -351,4 +390,25 @@ async function fetchStorePrice(storeKey, card, retryCount = 0, maxRetries = 3) {
     console.error(`Error fetching ${storeKey} price:`, error.message);
   }
   return null;
+}
+
+/**
+ * Fetch prices from all stores for a specific card printing
+ * @param {Object} card - Scryfall card object
+ * @returns {Promise<Object>} - Object with store keys and price data
+ */
+async function fetchAllStorePrices(card) {
+  const storeKeys = getStoreKeys();
+  const results = await Promise.all(
+    storeKeys.map((key) => fetchStorePrice(key, card)),
+  );
+
+  const prices = {};
+  storeKeys.forEach((key, index) => {
+    if (results[index]) {
+      prices[key] = results[index];
+    }
+  });
+
+  return prices;
 }

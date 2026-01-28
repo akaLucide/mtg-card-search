@@ -1,27 +1,31 @@
 // =============================================================================
-// CONFIGURATION
+// MTG CARD SEARCH - MAIN SCRIPT
+// Uses utilities from utils.js and card-utils.js
 // =============================================================================
 
 /**
  * Configuration constants
  */
 const CONFIG = {
-  DEFAULT_USD_TO_CAD: 1.35,
-  AUTOCOMPLETE_DELAY_MS: 300,
-  SCRYFALL_API_BASE: "https://api.scryfall.com",
+  AUTOCOMPLETE_DELAY_MS: 25,
 };
 
 /**
  * Exchange rate (updated on page load)
  */
-let USD_TO_CAD = CONFIG.DEFAULT_USD_TO_CAD;
+let USD_TO_CAD = CARD_CONFIG.DEFAULT_USD_TO_CAD;
 
-// Fetch live exchange rate
+// =============================================================================
+// EXCHANGE RATE
+// =============================================================================
+
+/**
+ * Fetch live USD to CAD exchange rate from API
+ * Falls back to default rate if fetch fails
+ */
 async function fetchExchangeRate() {
   try {
-    const response = await fetch(
-      "https://api.exchangerate-api.com/v4/latest/USD",
-    );
+    const response = await fetch(EXCHANGE_RATE_API);
     const data = await response.json();
     if (data.rates && data.rates.CAD) {
       USD_TO_CAD = data.rates.CAD;
@@ -29,7 +33,7 @@ async function fetchExchangeRate() {
     }
   } catch (error) {
     console.warn(
-      `Failed to fetch exchange rate, using default ${CONFIG.DEFAULT_USD_TO_CAD}:`,
+      `Failed to fetch exchange rate, using default ${CARD_CONFIG.DEFAULT_USD_TO_CAD}:`,
       error,
     );
   }
@@ -41,6 +45,7 @@ fetchExchangeRate();
 // =============================================================================
 // DOM ELEMENT REFERENCES
 // =============================================================================
+
 const cardInput = document.getElementById("cardInput");
 const searchBtn = document.getElementById("searchBtn");
 const cardImage = document.getElementById("cardImage");
@@ -55,7 +60,10 @@ const printingsSidebar = document.getElementById("printingsSidebar");
 const printingsList = document.getElementById("printingsList");
 const storeLinks = document.getElementById("storeLinks");
 
-// Store Configuration - now using centralized STORE_CONFIG from utils.js
+/**
+ * DOM store element references
+ * Links to STORE_CONFIG from utils.js for metadata
+ */
 const STORES = {
   f2f: {
     name: STORE_CONFIG.f2f.name,
@@ -74,12 +82,19 @@ const STORES = {
   },
 };
 
-// State
+// =============================================================================
+// STATE
+// =============================================================================
+
 let debounceTimer;
 let currentFocus = -1;
 let allPrintings = [];
 
-// Autocomplete functionality
+// =============================================================================
+// AUTOCOMPLETE
+// =============================================================================
+
+// Input listener for autocomplete
 cardInput.addEventListener("input", handleAutocomplete);
 
 // Keyboard navigation for autocomplete
@@ -114,13 +129,12 @@ document.addEventListener("click", (e) => {
 });
 
 /**
- * Handle autocomplete suggestions with debouncing
- * Fetches card suggestions from Scryfall API after delay
+ * Handle autocomplete input with debouncing
+ * Fetches suggestions from Scryfall API after delay
  */
 async function handleAutocomplete() {
   const query = cardInput.value.trim();
 
-  // Clear previous timer
   clearTimeout(debounceTimer);
 
   if (query.length < 2) {
@@ -128,23 +142,17 @@ async function handleAutocomplete() {
     return;
   }
 
-  // Debounce API calls
   debounceTimer = setTimeout(async () => {
-    try {
-      const response = await fetch(
-        `https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(query)}`,
-      );
-
-      if (!response.ok) return;
-
-      const data = await response.json();
-      displayAutocomplete(data.data);
-    } catch (error) {
-      console.error("Autocomplete error:", error);
-    }
-  }, 25);
+    const suggestions = await getAutocompleteSuggestions(query);
+    displayAutocomplete(suggestions);
+  }, CONFIG.AUTOCOMPLETE_DELAY_MS);
 }
 
+/**
+ * Display autocomplete suggestions in dropdown
+ * Highlights matching text in suggestions
+ * @param {Array} suggestions - Array of card name suggestions
+ */
 function displayAutocomplete(suggestions) {
   closeAutocomplete();
 
@@ -183,42 +191,37 @@ function displayAutocomplete(suggestions) {
   autocompleteList.classList.add("show");
 }
 
+/**
+ * Set active autocomplete item for keyboard navigation
+ * @param {HTMLCollection} items - Collection of autocomplete items
+ */
 function setActive(items) {
   if (!items || items.length === 0) return;
 
-  // Remove active class from all items
   Array.from(items).forEach((item) => item.classList.remove("active"));
 
   // Wrap around
   if (currentFocus >= items.length) currentFocus = 0;
   if (currentFocus < 0) currentFocus = items.length - 1;
 
-  // Add active class to current item
   items[currentFocus].classList.add("active");
   items[currentFocus].scrollIntoView({ block: "nearest" });
 }
 
+/**
+ * Close and clear autocomplete dropdown
+ */
 function closeAutocomplete() {
   autocompleteList.innerHTML = "";
   autocompleteList.classList.remove("show");
   currentFocus = -1;
 }
 
-// Event Listeners
+// =============================================================================
+// EVENT LISTENERS
+// =============================================================================
+
 searchBtn.addEventListener("click", searchCard);
-
-// =============================================================================
-// HELPER FUNCTIONS
-// =============================================================================
-
-/**
- * Format price in CAD
- */
-function formatPrice(usdPrice) {
-  if (!usdPrice || parseFloat(usdPrice) <= 0) return null;
-  const cadPrice = (parseFloat(usdPrice) * USD_TO_CAD).toFixed(2);
-  return `$${cadPrice} CAD`;
-}
 
 // =============================================================================
 // CARD SEARCH
@@ -243,54 +246,25 @@ async function searchCard() {
 
   try {
     // First, get the card name to ensure we have the correct spelling
-    const nameResponse = await fetch(
-      `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardNameValue)}`,
-    );
+    const cardData = await searchCardByName(cardNameValue);
 
-    if (!nameResponse.ok) {
-      if (nameResponse.status === 404) {
-        throw new Error(
-          "Card not found. Please check the spelling and try again.",
-        );
-      }
-      throw new Error("An error occurred while searching for the card.");
+    if (!cardData) {
+      throw new Error(
+        "Card not found. Please check the spelling and try again.",
+      );
     }
 
-    const nameData = await nameResponse.json();
-    const exactCardName = nameData.name;
+    const exactCardName = cardData.name;
 
     // Now search for all printings of this card
-    const printsResponse = await fetch(
-      `https://api.scryfall.com/cards/search?q=!"${encodeURIComponent(exactCardName)}"&unique=prints`,
-    );
+    allPrintings = await getCardPrintings(exactCardName);
 
-    if (!printsResponse.ok) {
+    if (allPrintings.length === 0) {
       throw new Error("Could not fetch card printings.");
     }
 
-    const printsData = await printsResponse.json();
-
-    // Store all printings
-    allPrintings = printsData.data;
-
     // Find the cheapest printing with a valid price
-    let cheapestCard = null;
-    let lowestPrice = Infinity;
-
-    for (const card of printsData.data) {
-      if (card.prices && card.prices.usd) {
-        const price = parseFloat(card.prices.usd);
-        if (price > 0 && price < lowestPrice) {
-          lowestPrice = price;
-          cheapestCard = card;
-        }
-      }
-    }
-
-    // If no card with USD price found, fall back to the first result
-    if (!cheapestCard) {
-      cheapestCard = nameData;
-    }
+    const cheapestCard = findCheapestPrinting(allPrintings) || cardData;
 
     // Display the cheapest card
     displayCard(cheapestCard);
@@ -305,22 +279,25 @@ async function searchCard() {
   }
 }
 
+/**
+ * Show error message to user
+ * @param {string} message - Error message to display
+ */
 function showError(message) {
   errorMessage.textContent = message;
   errorMessage.classList.add("show");
 }
+
+// =============================================================================
+// CARD DISPLAY
+// =============================================================================
 
 /**
  * Display card information and set up store links
  * @param {Object} card - Scryfall card object
  */
 function displayCard(card) {
-  // Get the card image URL (preferring normal size)
-  const imageUrl =
-    card.image_uris?.normal ||
-    card.image_uris?.large ||
-    card.image_uris?.png ||
-    card.card_faces?.[0]?.image_uris?.normal;
+  const imageUrl = getCardImageUrl(card);
 
   if (!imageUrl) {
     showError("No image available for this card.");
@@ -345,27 +322,44 @@ function displayCard(card) {
   cardInfo.classList.add("show");
 }
 
+/**
+ * Display Scryfall price information
+ * @param {Object} prices - Scryfall prices object
+ */
+function displayPrice(prices) {
+  if (!prices) {
+    cardPrice.textContent = "Price: Not available";
+    return;
+  }
+
+  const priceInfo = [];
+
+  const normalPrice = formatPriceCAD(prices.usd, USD_TO_CAD);
+  if (normalPrice) priceInfo.push(normalPrice);
+
+  const foilPrice = formatPriceCAD(prices.usd_foil, USD_TO_CAD);
+  if (foilPrice) priceInfo.push(`${foilPrice} (Foil)`);
+
+  cardPrice.textContent =
+    priceInfo.length > 0
+      ? `Price: ${priceInfo.join(" | ")}`
+      : "Price: Not available";
+}
+
 // =============================================================================
 // STORE LINKS AND PRICES
 // =============================================================================
 
 /**
- * Set up store links and fetch prices from all three stores
- * Uses centralized functions from utils.js for URL building and price fetching
- * @param {Object} card - Scryfall card object
+ * Initialize store price tracking state
+ * @returns {Object} - Store prices object for tracking
  */
-function setStoreLinks(card) {
+function initializeStorePriceTracking() {
   const storePrices = {};
 
-  // Set up each store using centralized functions from utils.js
   Object.entries(STORES).forEach(([key, store]) => {
-    // Build direct store URL using centralized function
-    store.link.href = buildDirectStoreUrl(key, card);
-
-    // Reset price display
+    store.link.href = "#";
     updatePriceDisplay(store.priceElement, "loading");
-
-    // Track for sorting
     storePrices[key] = {
       price: null,
       element: store.link,
@@ -373,52 +367,57 @@ function setStoreLinks(card) {
     };
   });
 
+  return storePrices;
+}
+
+/**
+ * Update store links with fetched prices
+ * @param {Object} storePrices - Store price tracking object
+ * @param {Object} priceData - Fetched price data by store key
+ */
+function updateStorePriceDisplays(storePrices, priceData) {
+  const storeKeys = getStoreKeys();
+
+  storeKeys.forEach((key) => {
+    const data = priceData[key];
+    if (data && data.price) {
+      storePrices[key].price = data.price;
+      updatePriceDisplay(STORES[key].priceElement, "success", data.price);
+    } else {
+      updatePriceDisplay(STORES[key].priceElement, "unavailable");
+      storePrices[key].price = Infinity;
+    }
+  });
+}
+
+/**
+ * Set up store links and fetch prices from all three stores
+ * Uses centralized functions from utils.js for URL building and price fetching
+ * @param {Object} card - Scryfall card object
+ */
+function setStoreLinks(card) {
+  const storePrices = initializeStorePriceTracking();
+
+  // Set up store URLs
+  Object.entries(STORES).forEach(([key, store]) => {
+    store.link.href = buildDirectStoreUrl(key, card);
+  });
+
   // Show the links section
   storeLinks.classList.add("show");
 
-  // Fetch all prices in parallel using centralized fetchStorePrice from utils.js
-  Promise.all([
-    fetchStorePrice("f2f", card),
-    fetchStorePrice("hoc", card),
-    fetchStorePrice("401games", card),
-  ]).then(([f2fData, hocData, games401Data]) => {
-    // Update F2F
-    if (f2fData && f2fData.price) {
-      storePrices.f2f.price = f2fData.price;
-      updatePriceDisplay(STORES.f2f.priceElement, "success", f2fData.price);
-    } else {
-      updatePriceDisplay(STORES.f2f.priceElement, "unavailable");
-      storePrices.f2f.price = Infinity;
-    }
-
-    // Update HOC
-    if (hocData && hocData.price) {
-      storePrices.hoc.price = hocData.price;
-      updatePriceDisplay(STORES.hoc.priceElement, "success", hocData.price);
-    } else {
-      updatePriceDisplay(STORES.hoc.priceElement, "unavailable");
-      storePrices.hoc.price = Infinity;
-    }
-
-    // Update 401 Games
-    if (games401Data && games401Data.price) {
-      storePrices["401games"].price = games401Data.price;
-      updatePriceDisplay(
-        STORES["401games"].priceElement,
-        "success",
-        games401Data.price,
-      );
-    } else {
-      updatePriceDisplay(STORES["401games"].priceElement, "unavailable");
-      storePrices["401games"].price = Infinity;
-    }
-
+  // Fetch all prices in parallel
+  fetchAllStorePrices(card).then((priceData) => {
+    updateStorePriceDisplays(storePrices, priceData);
     sortStoresByPrice(storePrices);
   });
 }
 
 /**
  * Update price element display
+ * @param {HTMLElement} priceElement - Price display element
+ * @param {string} status - Status: "success", "unavailable", "error", "loading"
+ * @param {number} price - Price value (for success status)
  */
 function updatePriceDisplay(priceElement, status, price = null) {
   if (status === "success" && price) {
@@ -436,15 +435,12 @@ function updatePriceDisplay(priceElement, status, price = null) {
   }
 }
 
-// fetchStorePrice is now centralized in utils.js
-
 /**
  * Sort and reorder store links by price (lowest first)
  * Highlights the cheapest store
  * @param {Object} storePrices - Object with store keys and price data
  */
 function sortStoresByPrice(storePrices) {
-  // Create array of stores with their prices
   const storesArray = Object.entries(storePrices).map(([key, value]) => ({
     key,
     price: value.price,
@@ -452,41 +448,16 @@ function sortStoresByPrice(storePrices) {
     priceElement: value.priceElement,
   }));
 
-  // Sort by price (lowest to highest)
   storesArray.sort((a, b) => a.price - b.price);
 
-  // Reorder the DOM elements
   storesArray.forEach((store, index) => {
     storeLinks.appendChild(store.element);
-
-    // Remove any existing cheapest class
     store.element.classList.remove("cheapest-store");
 
-    // Add cheapest class to the first (lowest price) store
     if (index === 0 && store.price !== Infinity) {
       store.element.classList.add("cheapest-store");
     }
   });
-}
-
-function displayPrice(prices) {
-  if (!prices) {
-    cardPrice.textContent = "Price: Not available";
-    return;
-  }
-
-  const priceInfo = [];
-
-  const normalPrice = formatPrice(prices.usd);
-  if (normalPrice) priceInfo.push(normalPrice);
-
-  const foilPrice = formatPrice(prices.usd_foil);
-  if (foilPrice) priceInfo.push(`${foilPrice} (Foil)`);
-
-  cardPrice.textContent =
-    priceInfo.length > 0
-      ? `Price: ${priceInfo.join(" | ")}`
-      : "Price: Not available";
 }
 
 // =============================================================================
@@ -501,12 +472,7 @@ function displayPrice(prices) {
 function displayPrintings(printings, currentCardId) {
   printingsList.innerHTML = "";
 
-  // Sort printings by price (lowest first)
-  const sortedPrintings = [...printings].sort((a, b) => {
-    const priceA = a.prices?.usd ? parseFloat(a.prices.usd) : Infinity;
-    const priceB = b.prices?.usd ? parseFloat(b.prices.usd) : Infinity;
-    return priceA - priceB;
-  });
+  const sortedPrintings = sortPrintingsByPrice(printings);
 
   sortedPrintings.forEach((card) => {
     const printingItem = document.createElement("div");
@@ -525,7 +491,7 @@ function displayPrintings(printings, currentCardId) {
     const priceInfo = document.createElement("div");
     priceInfo.className = "printing-price";
 
-    const formattedPrice = formatPrice(card.prices?.usd);
+    const formattedPrice = formatPriceCAD(card.prices?.usd, USD_TO_CAD);
     if (formattedPrice) {
       priceInfo.textContent = formattedPrice;
     } else {
@@ -550,6 +516,13 @@ function displayPrintings(printings, currentCardId) {
   printingsSidebar.classList.add("show");
 }
 
+// =============================================================================
+// UI HELPERS
+// =============================================================================
+
+/**
+ * Hide all UI elements (for resetting before new search)
+ */
 function hideAll() {
   cardImage.classList.remove("show");
   errorMessage.classList.remove("show");
