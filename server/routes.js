@@ -1,4 +1,5 @@
-const { scrapeStorePrice } = require("./scraper-utils");
+const { scrapeF2FPrice } = require("./scrapers/f2f");
+const { scrapeHOCPrice } = require("./scrapers/hoc");
 const { scrape401GamesPrice } = require("./scrapers/games401");
 
 /**
@@ -43,7 +44,7 @@ function registerRoutes(app) {
       const { cardSlug, collectorNumber, frameEffect, setSlug } = req.params;
       const url = `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${frameEffect}-${setSlug}-non-foil`;
       console.log("Fetching F2F (with effect):", url);
-      return scrapeStorePrice("Face to Face Games", url);
+      return scrapeF2FPrice(url);
     })
   );
 
@@ -54,7 +55,7 @@ function registerRoutes(app) {
       const { cardSlug, collectorNumber, setSlug } = req.params;
       const url = `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${setSlug}-non-foil`;
       console.log("Fetching F2F (standard):", url);
-      return scrapeStorePrice("Face to Face Games", url);
+      return scrapeF2FPrice(url);
     })
   );
 
@@ -65,7 +66,7 @@ function registerRoutes(app) {
       const { cardSlug, frameEffect, setSlug } = req.params;
       const url = `https://houseofcards.ca/products/${cardSlug}-${frameEffect}-${setSlug}`;
       console.log("Fetching HOC (with effect):", url);
-      return scrapeStorePrice("House of Cards", url);
+      return scrapeHOCPrice(url);
     })
   );
 
@@ -76,7 +77,7 @@ function registerRoutes(app) {
       const { cardSlug, setSlug } = req.params;
       const url = `https://houseofcards.ca/products/${cardSlug}-${setSlug}`;
       console.log("Fetching HOC (standard):", url);
-      return scrapeStorePrice("House of Cards", url);
+      return scrapeHOCPrice(url);
     })
   );
 

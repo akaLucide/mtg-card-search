@@ -8,6 +8,24 @@
  * Both methods accept the same params object so that callers never need
  * to branch on store keys — add a new store here and it works everywhere.
  */
+
+/**
+ * Normalizes the frame effect and promo flags into URL-ready segments.
+ * @param {string} storeKey
+ * @param {string|null} frameEffect
+ * @param {boolean} isPromo
+ * @param {string} separator - "-" for direct URLs, "/" for API URLs
+ * @returns {{ effectPart: string, promoPart: string }}
+ */
+function _buildUrlParts(storeKey, frameEffect, isPromo, separator) {
+  const normalizedEffect = frameEffect
+    ? normalizeFrameEffect(frameEffect, storeKey)
+    : null;
+  const effectPart = normalizedEffect ? `${normalizedEffect}${separator}` : "";
+  const promoPart = isPromo ? `promo-pack${separator}` : "";
+  return { effectPart, promoPart };
+}
+
 const STORE_CONFIG = {
   f2f: {
     name: "Face to Face Games",
@@ -15,29 +33,15 @@ const STORE_CONFIG = {
     emoji: "🛡️",
     shortName: "F2F",
 
-    /**
-     * @param {{ cardSlug, collectorNumber, setSlug, frameEffect, isPromo }} params
-     * @returns {string}
-     */
+    /** @param {{ cardSlug, collectorNumber, setSlug, frameEffect, isPromo }} params */
     buildDirectUrl({ cardSlug, collectorNumber, setSlug, frameEffect, isPromo }) {
-      const normalizedEffect = frameEffect
-        ? normalizeFrameEffect(frameEffect, "f2f")
-        : null;
-      const effectPart = normalizedEffect ? `${normalizedEffect}-` : "";
-      const promoPart = isPromo ? "promo-pack-" : "";
+      const { effectPart, promoPart } = _buildUrlParts("f2f", frameEffect, isPromo, "-");
       return `https://facetofacegames.com/products/${cardSlug}-${collectorNumber}-${promoPart}${effectPart}${setSlug}-non-foil`;
     },
 
-    /**
-     * @param {{ cardSlug, collectorNumber, setSlug, frameEffect, isPromo }} params
-     * @returns {string}
-     */
+    /** @param {{ cardSlug, collectorNumber, setSlug, frameEffect, isPromo }} params */
     buildApiUrl({ cardSlug, collectorNumber, setSlug, frameEffect, isPromo }) {
-      const normalizedEffect = frameEffect
-        ? normalizeFrameEffect(frameEffect, "f2f")
-        : null;
-      const effectPart = normalizedEffect ? `${normalizedEffect}/` : "";
-      const promoPart = isPromo ? "promo-pack/" : "";
+      const { effectPart, promoPart } = _buildUrlParts("f2f", frameEffect, isPromo, "/");
       return `${API_BASE}/price/f2f/${cardSlug}/${collectorNumber}/${promoPart}${effectPart}${setSlug}`;
     },
   },
@@ -48,29 +52,15 @@ const STORE_CONFIG = {
     emoji: "🃏",
     shortName: "HOC",
 
-    /**
-     * @param {{ cardSlug, setSlug, frameEffect, isPromo }} params
-     * @returns {string}
-     */
+    /** @param {{ cardSlug, setSlug, frameEffect, isPromo }} params */
     buildDirectUrl({ cardSlug, setSlug, frameEffect, isPromo }) {
-      const normalizedEffect = frameEffect
-        ? normalizeFrameEffect(frameEffect, "hoc")
-        : null;
-      const effectPart = normalizedEffect ? `${normalizedEffect}-` : "";
-      const promoPart = isPromo ? "promo-pack-" : "";
+      const { effectPart, promoPart } = _buildUrlParts("hoc", frameEffect, isPromo, "-");
       return `https://houseofcards.ca/products/${cardSlug}-${promoPart}${effectPart}${setSlug}`;
     },
 
-    /**
-     * @param {{ cardSlug, setSlug, frameEffect, isPromo }} params
-     * @returns {string}
-     */
+    /** @param {{ cardSlug, setSlug, frameEffect, isPromo }} params */
     buildApiUrl({ cardSlug, setSlug, frameEffect, isPromo }) {
-      const normalizedEffect = frameEffect
-        ? normalizeFrameEffect(frameEffect, "hoc")
-        : null;
-      const effectPart = normalizedEffect ? `${normalizedEffect}/` : "";
-      const promoPart = isPromo ? "promo-pack/" : "";
+      const { effectPart, promoPart } = _buildUrlParts("hoc", frameEffect, isPromo, "/");
       return `${API_BASE}/price/hoc/${cardSlug}/${promoPart}${effectPart}${setSlug}`;
     },
   },
@@ -81,29 +71,15 @@ const STORE_CONFIG = {
     emoji: "🎲",
     shortName: "401",
 
-    /**
-     * @param {{ cardSlug, setCode, frameEffect, isPromo }} params
-     * @returns {string}
-     */
+    /** @param {{ cardSlug, setCode, frameEffect, isPromo }} params */
     buildDirectUrl({ cardSlug, setCode, frameEffect, isPromo }) {
-      const normalizedEffect = frameEffect
-        ? normalizeFrameEffect(frameEffect, "401games")
-        : null;
-      const effectPart = normalizedEffect ? `${normalizedEffect}-` : "";
-      const promoPart = isPromo ? "promo-pack-" : "";
+      const { effectPart, promoPart } = _buildUrlParts("401games", frameEffect, isPromo, "-");
       return `https://store.401games.ca/products/${cardSlug}-${promoPart}${effectPart}${setCode}`;
     },
 
-    /**
-     * @param {{ cardSlug, setCode, frameEffect, isPromo }} params
-     * @returns {string}
-     */
+    /** @param {{ cardSlug, setCode, frameEffect, isPromo }} params */
     buildApiUrl({ cardSlug, setCode, frameEffect, isPromo }) {
-      const normalizedEffect = frameEffect
-        ? normalizeFrameEffect(frameEffect, "401games")
-        : null;
-      const effectPart = normalizedEffect ? `${normalizedEffect}/` : "";
-      const promoPart = isPromo ? "promo-pack/" : "";
+      const { effectPart, promoPart } = _buildUrlParts("401games", frameEffect, isPromo, "/");
       return `${API_BASE}/price/401games/${cardSlug}/${promoPart}${effectPart}${setCode}`;
     },
   },
