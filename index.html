@@ -60,9 +60,16 @@
     </div>
   </div>
 
-  <script src="utils.js"></script>
-  <script src="card-utils.js"></script>
-  <script src="script.js"></script>
+  <!-- Load order matters: each file depends only on globals defined before it -->
+  <script src="js/config.js"></script>
+  <script src="js/store-config.js"></script>
+  <script src="js/card-detection.js"></script>
+  <script src="js/url-builder.js"></script>
+  <script src="js/scryfall-api.js"></script>
+  <script src="js/price-utils.js"></script>
+  <script src="js/price-fetcher.js"></script>
+  <script src="js/autocomplete.js"></script>
+  <script src="js/script.js"></script>
 </body>
 
 </html>

@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Evaluate Magic: The Gathering deck lists and compare prices across multiple stores" />
   <title>MTG Deck Evaluator</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -50,9 +51,15 @@
     </div>
   </div>
 
-  <script src="utils.js"></script>
-  <script src="card-utils.js"></script>
-  <script src="deck-evaluator.js"></script>
+  <!-- Load order matters: each file depends only on globals defined before it -->
+  <script src="js/config.js"></script>
+  <script src="js/store-config.js"></script>
+  <script src="js/card-detection.js"></script>
+  <script src="js/url-builder.js"></script>
+  <script src="js/scryfall-api.js"></script>
+  <script src="js/price-utils.js"></script>
+  <script src="js/price-fetcher.js"></script>
+  <script src="js/deck-evaluator.js"></script>
 </body>
 
 </html>
