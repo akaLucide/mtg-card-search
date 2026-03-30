@@ -84,7 +84,8 @@ function _findNearMintVariantPrice(variants) {
     const title = (variant.title || variant.option1 || variant.name || "").toLowerCase();
     if (title.includes("near mint") || title.includes("nm")) {
       const raw = parseFloat(variant.price);
-      return raw > 1000 ? raw / 100 : raw;
+
+      return raw / 100;
     }
   }
   return null;
